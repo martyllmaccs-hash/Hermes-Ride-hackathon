@@ -1,0 +1,177 @@
+name: hermes-ride
+label: Hermes-Ride (motorcycle voice)
+kind: platform
+version: 0.2.0
+requires_hermes: ">=0.23.0"
+description: >
+  Hands-free voice chat with your Hermes agent from a phone mounted on a
+  motorcycle. The adapter serves a black, OLED-friendly phone page and its
+  WebSocket; the phone streams microphone audio plus 1 Hz GPS/motion summaries
+  (speed, heading, lean angle, braking/acceleration peaks). Speech is
+  transcribed with ElevenLabs Scribe v2 realtime (or with offline Whistle on
+  the Hermes host, setting stt_engine), each turn reaches the agent as a normal
+  gateway chat with one live sensor context line, and replies are spoken back
+  through Hermes's streaming TTS (or ElevenLabs directly) into the rider's
+  helmet headset. Barge-in, road-noise filtering, one turn at a time,
+  spoken approval notices (never auto-approved).
+author: Lana
+license: MIT
+provides_hooks:
+  - pre_llm_call
+  - pre_tool_call
+  - post_tool_call
+  - post_api_request
+python_dependencies:
+  - "aiohttp>=3.9,<4"
+requires_env:
+  - name: ELEVENLABS_API_KEY
+    description: "ElevenLabs API key: Scribe v2 realtime speech-to-text and (unless Hermes's own TTS is used) text-to-speech. Still required at start with stt_engine whistle (the reply voice and the Scribe fallback use it)"
+    prompt: "ElevenLabs API key"
+    url: "https://elevenlabs.io/app/settings/api-keys"
+    password: true
+  - name: RIDE_ACCESS_KEY
+    description: "Secret for the phone page: type it into the page's key form once per browser, the page then keeps an HttpOnly cookie (key links are retired). Use 24+ random characters."
+    prompt: "Ride access key (random, 24+ chars)"
+    password: true
+optional_env:
+  - name: RIDE_ALLOWED_USERS
+    description: "Gateway allowlist for this platform. The phone always speaks as RIDE_USER_ID (default 'rider'), so set this to 'rider'."
+    prompt: "Allowed ride users (default rider)"
+    password: false
+  - name: RIDE_ALLOW_ALL_USERS
+    description: "Allow any user id on this platform (the access key still gates the page)"
+    prompt: "Allow all ride users? (true/false)"
+    password: false
+  - name: RIDE_HOST
+    description: "Bind host for the phone page (default 127.0.0.1; put HTTPS in front with `tailscale serve`)"
+    prompt: "Ride bind host"
+    password: false
+  - name: RIDE_PORT
+    description: "Port for the phone page and WebSocket (default 8790)"
+    prompt: "Ride port"
+    password: false
+  - name: RIDE_TTS_ENGINE
+    description: "auto (default): Hermes's streaming TTS when its ElevenLabs backend is installed, else direct; hermes; direct (the plugin calls ElevenLabs itself)"
+    prompt: "TTS engine (auto/hermes/direct)"
+    password: false
+  - name: RIDE_VOICE_ID
+    description: "ElevenLabs voice id for direct TTS (default: tts.elevenlabs.voice_id from config.yaml)"
+    prompt: "ElevenLabs voice id"
+    password: false
+  - name: RIDE_LANGUAGE
+    description: "Speech-to-text language code (default en; empty = auto-detect)"
+    prompt: "STT language"
+    password: false
+  - name: RIDE_WAKE_WORD
+    description: "The wake word: hey hermes (default) or hey lana; unknown names fall back to hey hermes"
+    prompt: "Wake word"
+    password: false
+  - name: RIDE_SUMMARY_PROMPT
+    description: "At a reset, leave a 'Ride Summary?' yes/no question as the old session's last message (default true). Yes asks that session's agent for the summary in chat"
+    prompt: "Ride Summary prompt at reset"
+    password: false
+  - name: RIDE_ORB_DESIGN
+    description: "The phone's orb design (default simple; unknown names fall back to simple)"
+    prompt: "Orb design"
+    password: false
+  - name: RIDE_ORB_MOTION
+    description: "How much the phone's orb moves and deforms with the motorcycle: lean, braking, bumps (default 1, 0 to 2, 0 = off)"
+    prompt: "Orb motion (0 to 2)"
+    password: false
+  - name: RIDE_SHOW_WORD
+    description: "Show the state word under the orb, for debugging (true/false, default false)"
+    prompt: "Show state word? (true/false)"
+    password: false
+  - name: RIDE_DOUBLE_TAP_MS
+    description: "Mic mute on the phone: two taps within this many ms toggle it (default 350, 150 to 1000)"
+    prompt: "Double-tap interval (ms)"
+    password: false
+  - name: RIDE_MIC_BASE_DB
+    description: "Mic gate threshold in dBFS at standstill (default -38, -70 to -20; higher = less sensitive)"
+    prompt: "Mic threshold (dB)"
+    password: false
+  - name: RIDE_PLAY_BUFFER_MS
+    description: "The phone holds the first segment of each spoken reply this many ms before playing it, so later segments are queued and the joins do not stutter (default 250, 0 to 1000, 0 = off)"
+    prompt: "Playback buffer (ms)"
+    password: false
+  - name: RIDE_TONE_FIRST_S
+    description: "The soft doo-doo while the assistant thinks starts this many seconds after the thinking cue, then repeats every 4 to 6 s (default 1.2, 0 to 30)"
+    prompt: "Thinking tone lead-in (s)"
+    password: false
+  - name: RIDE_END_OF_TURN_S
+    description: "Scribe VAD silence before a commit, in seconds (default 1.2, 0.5 to 5); the adaptive end of turn waits on top"
+    prompt: "End-of-turn silence (s)"
+    password: false
+  - name: RIDE_RIDER_NAME
+    description: "How the agent should call the rider in the context line (default: the rider)"
+    prompt: "Rider name"
+    password: false
+  - name: RIDE_USER_ID
+    description: "User id the phone speaks as (default rider)"
+    prompt: "Ride user id"
+    password: false
+  - name: RIDE_CHAT_ID
+    description: "Chat id of the ride conversation (default ride)"
+    prompt: "Ride chat id"
+    password: false
+  - name: RIDE_STT_ENGINE
+    description: "Speech-to-text engine: scribe (default, ElevenLabs Scribe v2 realtime) or whistle (offline Whistle on this Hermes host, batch, no Scribe credits; forces the server route)"
+    prompt: "STT engine (scribe/whistle)"
+    password: false
+  - name: RIDE_STT_FALLBACK
+    description: "What a Whistle page switches to after a Whistle failure: scribe (default: the gated audio then goes through this host to ElevenLabs Scribe for the rest of that page load) or none (the page keeps hearing that recognition is down)"
+    prompt: "STT fallback (scribe/none)"
+    password: false
+  - name: RIDE_WHISTLE_PYTHON
+    description: "Interpreter with the needle package for tools/whistle_worker.py, e.g. ~/whistle/venv/bin/python (default: Hermes's own stt.providers.whistle.command, else python3)"
+    prompt: "Whistle python (path)"
+    password: false
+  - name: RIDE_WHISTLE_WEIGHTS
+    description: "The .cact Whistle weights, e.g. ~/whistle/whistle.cact (default: whistle.cact next to Hermes's whistle provider script, else the needle default)"
+    prompt: "Whistle weights (path)"
+    password: false
+  - name: RIDE_WHISTLE_LANGUAGE
+    description: "Language code handed to Whistle (default: RIDE_LANGUAGE, and en when that is empty or auto)"
+    prompt: "Whistle language"
+    password: false
+  - name: RIDE_WHISTLE_END_S
+    description: "Whistle: seconds of silence after the rider stops speaking before the phrase is transcribed (default 0.9, 0.3 to 3)"
+    prompt: "Whistle end of phrase (s)"
+    password: false
+  - name: RIDE_WHISTLE_TIMEOUT_S
+    description: "Whistle: seconds one phrase may take; past this the helper is killed and the phrase fails (default 20, 1 to 120)"
+    prompt: "Whistle timeout (s)"
+    password: false
+# Speech-to-text engine (round 3). Ride reads these from
+# platforms.ride.extra in config.yaml (or the RIDE_* env of the same name, which wins); this version does not read
+# plugins.entries.hermes-ride.settings, so a value set only there is ignored. The entries below document the keys,
+# their types and the defaults in ride_core.DEFAULTS.
+config_schema:
+  stt_engine:
+    type: str
+    default: "scribe"
+    description: "Which speech-to-text hears a finished phrase: scribe (default, ElevenLabs Scribe v2 realtime on both routes) or whistle (offline Whistle on this Hermes host, batch; forces the server route and spends no Scribe credits). Set it as platforms.ride.extra.stt_engine or RIDE_STT_ENGINE. Unknown names fall back to scribe with a logged warning."
+  stt_fallback:
+    type: str
+    default: "scribe"
+    description: "What a Whistle page switches to after a Whistle failure: scribe (default: the gated audio then goes through this host to ElevenLabs Scribe for the rest of that page load) or none (the page keeps hearing that recognition is down). Anything but none is scribe. Set it as platforms.ride.extra.stt_fallback or RIDE_STT_FALLBACK."
+  whistle_python:
+    type: str
+    default: "python3"
+    description: "Interpreter with the needle package for tools/whistle_worker.py, e.g. ~/whistle/venv/bin/python. Set it as platforms.ride.extra.whistle_python or RIDE_WHISTLE_PYTHON. Not set = the first word of Hermes's stt.providers.whistle.command when that is a file, else python3."
+  whistle_weights:
+    type: str
+    default: ""
+    description: "The .cact Whistle weights, e.g. ~/whistle/whistle.cact. Set it as platforms.ride.extra.whistle_weights or RIDE_WHISTLE_WEIGHTS. Not set = whistle.cact next to Hermes's stt.providers.whistle.command script when it exists, else blank (the needle package default)."
+  whistle_language:
+    type: str
+    default: ""
+    description: "Language code handed to Whistle. Set it as platforms.ride.extra.whistle_language or RIDE_WHISTLE_LANGUAGE. Blank = the Ride language setting (language / RIDE_LANGUAGE, default en), and en when that is empty or auto."
+  whistle_end_s:
+    type: float
+    default: 0.9
+    description: "Whistle only: seconds of silence after the rider stops speaking (the phone's voice-activity off edge) before the phrase is transcribed; 0.3 to 3. Set it as platforms.ride.extra.whistle_end_s or RIDE_WHISTLE_END_S."
+  whistle_timeout_s:
+    type: float
+    default: 20.0
+    description: "Whistle only: seconds one phrase may take to transcribe; past this the helper is killed and the phrase fails (see stt_fallback); 1 to 120. Set it as platforms.ride.extra.whistle_timeout_s or RIDE_WHISTLE_TIMEOUT_S."

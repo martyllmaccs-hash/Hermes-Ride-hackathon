@@ -1,0 +1,36 @@
+Hermes Ride default cues (static/cues/)
+
+wake_a.m4a, wake_b.m4a  wake answers ("yes" / "here"), one is picked at random per wake
+thinking.m4a            message received, Lana is thinking (voice only, no violin: fix round 3, R3-3)
+                        (There is no extended cue since WP1: while work continues the page plays a soft repeating
+                        tone, no file; the old extended.m4a was removed from the default set.)
+done.m4a                answer ready (before the answer) and answer finished (after it)
+mute.m4a, unmute.m4a    the mic was muted / unmuted by a double tap (WP4): 0.5 s, two soft notes, falling for
+                        mute (A5 880 Hz then D5 587 Hz), rising for unmute (D5 then A5)
+
+Violin (melody below) only in wake_a, wake_b and done. thinking: Lana's voice from the same render
+(cues/v3/v_thinking.mp3), trimmed, 100 Hz high-pass, light echo, levelled to the old cues'
+voice part (mean -26.5 / -26.8 dB), AAC 128k 48 kHz (ffmpeg, 2026-11-09).
+
+Melody: Sergei Prokofiev, "Peter and the Wolf", Peter's theme, bar 1. Our own arrangement and render,
+a nod to its use in Blade Runner 2049. No audio from the film or any recording of it is used.
+Samples: VSCO-2 Community Edition violin section (susVib, Spic), CC0,
+https://github.com/sgossner/VSCO-2-CE
+Spoken words in the wake/thinking cues and all status clips (static/clips/): rendered once with
+ElevenLabs text-to-speech (voice hLjwV7lYzk15SWLUmhEH, model eleven_flash_v2_5).
+
+The cue folder can be replaced: point RIDE_CUE_DIR at a directory with the same six file names (a folder without
+mute.m4a / unmute.m4a still works: those two toggles then play no cue).
+If anyone objects to the melody, swap it for Bach, Violin Concerto in E major BWV 1042 (public domain).
+
+thinking.m4a (2026-11-09, Lana): Lana's voice alone from ../cues/v3/v_thinking.mp3 with the same light reverb as the v3 mix (0.9 s decaying-noise impulse, 6 kHz low-pass, 20% wet), no violin; levelled to -26.5 dB mean.
+
+mute.m4a, unmute.m4a (2026-11-09, Lana, WP4): synthesised with ffmpeg only, no samples or outside audio: two
+notes each (sine + 30 % second harmonic, 6 ms attack, exponential decay), 0.13 s then 0.26 s, 0.06 s fade out;
+-7 dB, peak -12.4 dB, mean -22.8 dB (short tones, so a higher mean than the voice cues), AAC 128k 48 kHz mono.
+
+reset.m4a, reset_failed.m4a (2026-11-09, Lana, WP6): synthesised with ffmpeg only (aevalsrc), no samples or outside
+audio. reset: three rising notes (E5 659 Hz, A5 880 Hz, E6 1319 Hz; sine + 30 % second harmonic, 6 ms attack,
+exponential decay), 0.66 s, played when the reset bar has been held 3 s. reset_failed: two low falling notes (D4 294 Hz,
+G#3 208 Hz), 0.6 s, played when the server says the reset failed. Peak -12.2 / -14.6 dB, mean -26.5 / -24.6 dB, AAC
+128k 48 kHz mono. A custom RIDE_CUE_DIR without them plays no reset cue (the reset still works).

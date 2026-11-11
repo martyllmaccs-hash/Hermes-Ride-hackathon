@@ -1,0 +1,9 @@
+Hermes-Ride
+Copyright (c) 2026 the Hermes-Ride authors. MIT licensed, see LICENSE.
+
+assets/hermes-ride.svg
+  The Hermes-Ride mascot: an unofficial derivative of the Hermes Agent mascot by Nous Research
+  (Copyright (c) 2025 Nous Research, MIT License). Not an official Nous Research asset, and not endorsed by them.
+
+Third-party assets fetched at install time (static/vendor/, by tools/fetch_assets.sh) keep their own licences:
+  sherpa-onnx WebAssembly keyword-spotting runtime and the sherpa-onnx-kws-zipformer-zh-en-3M model, Apache-2.0.

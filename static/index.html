@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Hermes-Ride">
+<title>Hermes-Ride</title>
+<style>
+html,body{margin:0;height:100%;background:#000;color:#333;font-family:-apple-system,system-ui,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+/* WP5 (D1): the orb (orb.js). #orb is centred, at most 3/4 of the screen width (and of the height in landscape); the
+   ring (#orbl) shows the mic level in listening, the core (#orbc) the state. Design d-simple; state classes s-<state>.
+   Only opacity and transform animate (compositor work, no layout or paint per frame); sleep and muted animate nothing.
+   Fix G (item 8): the Holodeck blue (holodeck-release-sol renderer): #e8fdff hot core, #a8f7ff rim, #7ff0ff cyan, #2f7c8c
+   deep, on black; the low-alpha outer bands of the gradient are the glow (no animated blur).
+   P4: the orb moves with the motorcycle. #orbm wraps everything; orb_motion.js's frame is written on it as custom
+   properties (--mx --my shift in % of the diameter, --sx --sy squash/stretch, --mk shear, --mr the light's rotation,
+   --ma the mount's up axis), at most 20 times a second and never asleep; the 100 ms transitions do the smoothing.
+   P4 look (d-simple; with d-plain added it is the flat orb as it was): a halo behind, slow light drifting inside the core (.flow,
+   it sloshes at half the body's shift again), and a glass shell (.gyro: sky highlight above, rim light below) that
+   turns by --mr so it stays under the real sky when the bike leans. All static paint, moved by transform only. */
+#orb{position:fixed;left:50%;top:50%;width:min(75vw,75vh);height:min(75vw,75vh);transform:translate(-50%,-50%);pointer-events:none}
+#orbm{position:absolute;inset:0;transform:translate(calc(var(--mx,0)*1%),calc(var(--my,0)*1%)) rotate(calc(var(--ma,0)*1deg)) skewX(calc(var(--mk,0)*1deg)) scale(var(--sx,1),var(--sy,1));transition:transform 100ms linear}
+#orb .core,#orb .lvl{position:absolute;inset:0;border-radius:50%;box-sizing:border-box}
+.orb .core{opacity:0;transition:opacity .6s ease}
+.orb .lvl{opacity:0;transform:scale(.6);transition:opacity .6s ease}
+.orb .halo,.orb .flow,.orb .gyro{position:absolute;border-radius:50%;opacity:0;transition:opacity .6s ease}
+.orb .halo{inset:-16%;background:radial-gradient(circle,rgba(127,240,255,.2) 0%,rgba(47,124,140,.16) 38%,rgba(47,124,140,.05) 56%,rgba(0,0,0,0) 70%)}
+.orb .flow{inset:14%;transform:translate(calc(var(--mx,0)*.7%),calc(var(--my,0)*.7%));transition:opacity .6s ease,transform 160ms linear}
+.orb .flow::before{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 34%,rgba(232,253,255,.5) 0%,rgba(232,253,255,0) 30%),radial-gradient(circle at 70% 60%,rgba(60,150,255,.42) 0%,rgba(60,150,255,0) 34%),radial-gradient(circle at 58% 24%,rgba(127,240,255,.3) 0%,rgba(127,240,255,0) 26%),radial-gradient(circle at 36% 72%,rgba(120,255,230,.26) 0%,rgba(120,255,230,0) 28%)}
+.orb .gyro{inset:15%;transform:rotate(calc(var(--mr,0)*1deg));transition:opacity .6s ease,transform 120ms linear;background:radial-gradient(ellipse 40% 22% at 50% 15%,rgba(255,255,255,.85) 0%,rgba(255,255,255,.25) 55%,rgba(255,255,255,0) 100%),radial-gradient(ellipse 60% 30% at 50% 97%,rgba(127,240,255,.5) 0%,rgba(127,240,255,0) 100%);box-shadow:inset 0 0 0 1px rgba(232,253,255,.22),inset 0 -14px 22px -12px rgba(168,247,255,.7),inset 0 16px 26px -16px rgba(255,255,255,.8)}
+.d-plain .halo,.d-plain .flow,.d-plain .gyro{display:none}
+.orb.d-simple.d-plain .lvl{box-shadow:none}
+.d-simple .core{background:radial-gradient(circle,#e8fdff 0%,#a8f7ff 14%,#7ff0ff 30%,rgba(47,124,140,.6) 48%,rgba(47,124,140,.2) 62%,rgba(0,0,0,0) 71%)}
+.d-simple.s-listening .core{opacity:1;animation:orb-alive 3.2s ease-in-out infinite}
+.d-simple.s-listening .lvl{opacity:1;border:3px solid #a8f7ff;transition:transform 60ms linear}
+.d-simple.s-thinking .core{opacity:1;background:radial-gradient(circle,#fff 0%,#e8f2ff 30%,#7fa8ff 52%,rgba(0,0,0,0) 71%);animation:orb-swell 1s ease-out both,orb-breath 4.8s ease-in-out 1s infinite}
+.d-simple.s-thinking.beat-a .core{animation:orb-beat-a 4.8s ease-in-out infinite}
+.d-simple.s-thinking.beat-b .core{animation:orb-beat-b 4.8s ease-in-out infinite}
+.d-simple.s-speaking .core{opacity:1;animation:orb-env 1.7s linear infinite;background:radial-gradient(circle,#ffe8f7 0%,#ffa8e2 14%,#ff80d4 30%,rgba(140,47,101,.6) 48%,rgba(140,47,101,.2) 62%,rgba(0,0,0,0) 71%)}
+.d-simple.s-speaking .lvl{opacity:1;border:3px solid #ffa8e2;transition:transform 60ms linear}
+.d-simple.s-muted .lvl{opacity:1;border:2px solid #555;transform:scale(.7)}
+.d-simple.s-offline .core,.d-simple.s-reconnecting .core,.d-simple.s-connecting .core{opacity:1;background:radial-gradient(circle,#4a2e00 0%,#241600 45%,rgba(0,0,0,0) 71%);animation:orb-pulse 2.4s ease-in-out infinite}
+.d-simple.s-listening .lvl{box-shadow:0 0 16px rgba(127,240,255,.5),inset 0 0 16px rgba(127,240,255,.3)}
+/* speaking = the listening look with the cyan turned pink at the same HSL lightness (hue 186 -> 325); the blue streak in the cloud stays */
+.d-simple.s-speaking .lvl{box-shadow:0 0 16px rgba(255,128,212,.5),inset 0 0 16px rgba(255,128,212,.3)}
+.d-simple.s-speaking .halo{background:radial-gradient(circle,rgba(255,128,212,.2) 0%,rgba(140,47,101,.16) 38%,rgba(140,47,101,.05) 56%,rgba(0,0,0,0) 70%)}
+.d-simple.s-speaking .flow::before{background:radial-gradient(circle at 30% 34%,rgba(255,232,247,.5) 0%,rgba(255,232,247,0) 30%),radial-gradient(circle at 70% 60%,rgba(60,150,255,.42) 0%,rgba(60,150,255,0) 34%),radial-gradient(circle at 58% 24%,rgba(255,128,212,.3) 0%,rgba(255,128,212,0) 26%),radial-gradient(circle at 36% 72%,rgba(255,120,199,.26) 0%,rgba(255,120,199,0) 28%)}
+.d-simple.s-speaking .gyro{background:radial-gradient(ellipse 40% 22% at 50% 15%,rgba(255,255,255,.85) 0%,rgba(255,255,255,.25) 55%,rgba(255,255,255,0) 100%),radial-gradient(ellipse 60% 30% at 50% 97%,rgba(255,128,212,.5) 0%,rgba(255,128,212,0) 100%);box-shadow:inset 0 0 0 1px rgba(255,232,247,.22),inset 0 -14px 22px -12px rgba(255,168,226,.7),inset 0 16px 26px -16px rgba(255,255,255,.8)}
+.d-simple.s-listening .halo,.d-simple.s-speaking .halo{opacity:1;animation:orb-halo 6.4s ease-in-out infinite}
+.d-simple.s-thinking .halo{opacity:1;animation:orb-halo 4.8s ease-in-out infinite}
+.d-simple.s-listening .flow,.d-simple.s-speaking .flow{opacity:1}
+.d-simple.s-thinking .flow{opacity:.55}
+.d-simple.s-listening .flow::before,.d-simple.s-thinking .flow::before{animation:orb-flow 18s linear infinite}
+.d-simple.s-speaking .flow::before{animation:orb-flow 7s linear infinite}
+.d-simple.s-listening .gyro,.d-simple.s-speaking .gyro,.d-simple.s-thinking .gyro{opacity:1}
+.d-simple.s-offline .gyro,.d-simple.s-reconnecting .gyro,.d-simple.s-connecting .gyro{opacity:.16}
+@keyframes orb-alive{0%,100%{transform:scale(.9)}50%{transform:scale(.96)}}
+@keyframes orb-swell{0%{opacity:.2;transform:scale(.7)}55%{opacity:1;transform:scale(1)}100%{opacity:.55;transform:scale(.86)}}
+@keyframes orb-breath{0%,100%{opacity:.55;transform:scale(.86)}50%{opacity:.35;transform:scale(.8)}}
+@keyframes orb-beat-a{0%{opacity:.4;transform:scale(.8)}20%{opacity:.85;transform:scale(.92)}100%{opacity:.4;transform:scale(.8)}}
+@keyframes orb-beat-b{0%{opacity:.4;transform:scale(.8)}20%{opacity:.85;transform:scale(.92)}100%{opacity:.4;transform:scale(.8)}}
+@keyframes orb-env{0%,100%{transform:scale(.84)}13%{transform:scale(.92)}27%{transform:scale(.87)}41%{transform:scale(.97)}58%{transform:scale(.89)}72%{transform:scale(.95)}86%{transform:scale(.86)}}
+@keyframes orb-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes orb-halo{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes orb-flow{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#orbm,.orb .flow,.orb .gyro{transform:none}}
+/* show_word (debug): the display() word under the orb */
+#w{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));text-align:center;font-size:7vw;font-weight:600;letter-spacing:.02em;color:#2a2a2a;pointer-events:none}
+#setup{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:#000}
+button{background:#111;color:#999;border:1px solid #333;border-radius:14px;font-size:24px;padding:26px 30px;width:78vw}
+button:disabled{color:#444;border-color:#1a1a1a}
+#note{color:#555;font-size:15px;width:78vw;text-align:center;min-height:2.6em}
+/* WP7 (D2): the two setup taps are the orb. #b1 and #b2 stay real <button>s (iOS needs a real tap for audio, mic and
+   motion), drawn as the running orb's blue core, one at a time in the middle, no instruction text (rider feedback: the pulse
+   says "tap me"). Waiting for a tap = a slow blue pulse; disabled (tap 1 running, or not yet tap 2's turn) = dim and
+   still. #setup is removed by tap 2, so the pulse never runs while riding (page_orb_test allows .sorb only). */
+.sorb{width:min(60vw,60vh);height:min(60vw,60vh);border-radius:50%;border:0;padding:0;background:transparent;position:relative;flex:none}
+.sorb[hidden]{display:none}
+.sorb .core{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,#e8fdff 0%,#a8f7ff 14%,#7ff0ff 30%,rgba(47,124,140,.6) 48%,rgba(47,124,140,.2) 62%,rgba(0,0,0,0) 71%);transition:opacity .3s ease}
+.sorb:enabled .core{animation:sorb-pulse 2s ease-in-out infinite}
+.sorb:disabled .core{opacity:.35;animation:none}
+@keyframes sorb-pulse{0%,100%{opacity:.55;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
+/* R3-6: the mic indicator, apart from the state colours: red dot = audio can leave the phone (STT open / gate
+   open), grey ring = mic captured for the on-phone wake word only, crossed ring = every mic track stopped (off) or
+   muted by the MUTE button (round 3: same cross, class muted) */
+#mic{position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;width:16px;height:16px;border-radius:50%;box-sizing:border-box;z-index:3}
+#mic.live{background:#e00000;box-shadow:0 0 0 3px #400}
+#mic.local{border:2px solid #777}
+#mic.off,#mic.muted{border:2px solid #555;background:linear-gradient(45deg,transparent 45%,#555 45%,#555 55%,transparent 55%)}
+/* The dot is redundant on the mount; hidden. The classes are still kept up to date (privacy tests). */
+#mic{display:none}
+/* info lines (engine, mic name, "resetting") go to #diag, never shown; only failures that need an action are on screen */
+#diag{display:none}
+/* Fix B: the Tap overlay when the mic did not come back by itself (setup's orb, one word beneath) */
+#rv{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:#000;z-index:5}
+#rv[hidden]{display:none}
+/* Fix C (item 1): one word under the setup orb, "Tap", until the tap; it fades out then, and back on a failed tap */
+#tap,.tapw{font-size:60px;font-weight:600;color:#a8f7ff;letter-spacing:.04em;transition:opacity .6s ease}
+#tap.gone{opacity:0}
+/* 10 Nov: the one mic control is as big as the reset bar: the two share one size rule (width, height, box).
+   Round 3: that control is MUTE / UNMUTE, one tap; muted (class on, text UNMUTE) it is cyan, so the state is seen. */
+#resetbar,#mute{box-sizing:content-box;width:88vw;height:72px}
+#mute{font-size:19px;font-weight:600;letter-spacing:.04em;padding:0;color:#888;background:#0a0a0a}
+#mute.on{color:#a8f7ff;border-color:#a8f7ff}
+/* WP6: the status line sits at the top now (the bottom belongs to the reset reveal) */
+#status{position:fixed;top:calc(44px + env(safe-area-inset-top));left:5vw;width:90vw;text-align:center;color:#999;font-size:15px;pointer-events:none}
+/* WP6 (D5, P6): the reset reveal. A visible grabber (a short grey pill, 44 px of touch height) near the bottom edge, held
+   above the iOS home-indicator zone by the safe-area inset + 28 px; an upward drag from it opens the panel: the long red
+   bar (hold 3 s: the fill runs while held, release or movement cancels) and the MUTE button. Everything inside #reveal
+   carries data-no-dbltap (no tap wake from here). The fill is a CSS transition: no timer, no animation frame. */
+#reveal{position:fixed;left:0;right:0;bottom:calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column-reverse;align-items:center;gap:16px;z-index:4;-webkit-touch-callout:none}
+#reveal[hidden],#rpanel[hidden]{display:none}
+#grab{width:160px;height:44px;display:flex;align-items:center;justify-content:center;touch-action:none}
+#grab::after{content:'';width:56px;height:5px;border-radius:3px;background:#3a3a3a}
+#rpanel{display:flex;flex-direction:column;align-items:center;gap:16px}
+#resetbar{position:relative;width:88vw;height:72px;border-radius:14px;background:#2a0505;border:1px solid #6a1010;overflow:hidden;touch-action:none}
+#resetfill{position:absolute;inset:0;background:#d01818;transform:scaleX(0);transform-origin:left center}
+#resetbar.holding #resetfill{transform:scaleX(1);transition:transform 3s linear}
+#resettext{position:relative;display:flex;height:100%;align-items:center;justify-content:center;color:#f0d0d0;font-size:19px;font-weight:600;letter-spacing:.04em;white-space:nowrap;pointer-events:none}
+</style></head><body>
+<div id="orb" class="orb d-simple s-sleep" aria-hidden="true">
+  <div id="orbm">
+    <div class="halo"></div>
+    <div id="orbl" class="lvl"></div>
+    <div id="orbc" class="core"><div class="flow"></div><div class="gyro"></div></div>
+  </div>
+</div>
+<div id="w"></div>
+<div id="setup" data-no-dbltap>
+  <button id="b1" class="sorb" aria-label="start: mic, audio and motion"><span class="core"></span></button>
+  <div id="tap">Tap</div>
+  <div id="note"></div>
+</div>
+<div id="status" role="status"></div>
+<div id="rv" data-no-dbltap hidden>
+  <button id="rvb" class="sorb" aria-label="tap: the mic again"><span class="core"></span></button>
+  <div class="tapw">Tap</div>
+</div>
+<div id="diag" aria-hidden="true"></div>
+<div id="mic" role="img" aria-label="microphone"></div>
+<div id="reveal" data-no-dbltap hidden>
+  <div id="grab" role="button" aria-label="drag up: reset and mute"></div>
+  <div id="rpanel" hidden>
+    <div id="resetbar" role="button" aria-label="hold 3 seconds: reset and start a new session"><div id="resetfill"></div><span id="resettext">RESET – NEW SESSION</span></div>
+    <button id="mute" aria-pressed="false" hidden>MUTE</button>
+  </div>
+</div>
+<audio id="a" playsinline preload="auto"></audio>
+<script src="client_state.js"></script>
+<script src="gate.js"></script>
+<script src="wake.js"></script>
+<script src="stt.js"></script>
+<script src="telemetry.js"></script>
+<script src="gesture.js"></script>
+<script src="orb_motion.js"></script>
+<script src="orb.js"></script>
+<script src="reset.js"></script>
+<script>
+'use strict';
+// Protocol v2 page: everything that can run here does (gate, wake word, STT, cues, telemetry); the server gets text,
+// VAD edges, telemetry batches and (stt_route=server only) gated PCM.
+const $ = id => document.getElementById(id);
+const A = $('a');
+const RIDE = 'ride-' + new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+let ws = null, wsOpen = false, helloSeen = false, tries = 0, replaced = false, cfg = {}, route = 'phone', engineName = 'transcript';
+let linkEpoch = null, srvStt = null;     // AUD-R3-06: this link's epoch; the server's Scribe session state (server route)
+const cueUrls = {};
+function send(o) { if (wsOpen) try { ws.send(JSON.stringify(o)); } catch (e) {} }
+// AUD-V2-10: every setup prerequisite has a deadline (ms; window.RIDE_SETUP_WAIT overrides, for tests). A hung
+// Cache Storage / IndexedDB is skipped, a hung mic/worklet is a visible failure, and the wake engine is chosen from
+// the server's hello.cfg (or, after `hello`, explicitly from the defaults). The audio unlock and the AudioContext
+// resume are bounded too (fix round 2, R1): a pending play()/resume() is a visible failure with tap 1 again.
+const WAIT = Object.assign({cache: 3000, idb: 2000, mic: 15000, worklet: 8000, hello: 5000, unlock: 4000, resume: 4000, revive: 1200, revive_tap: 2000},
+                           window.RIDE_SETUP_WAIT || {});
+// Round 3 (A3): the mic watchdog's timings. Missing frames for frames_ms, every track muted for muted_ms (h2: iOS mutes
+// the track and silence keeps flowing), a revive ladder of 2/4/8 then every 10 s, and "I can't hear the mic" only after
+// one revive attempt has finished and say_after_ms past the interruption. Tests override these small (RIDE_MIC_WAIT).
+const MW = Object.assign({frames_ms: 3000, muted_ms: 3000, say_ms: 5000, say_after_ms: 2000, tick_ms: 1000,
+                          ladder: [2000, 4000, 8000, 10000]}, window.RIDE_MIC_WAIT || {});
+function deadline(p, ms, what) {
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => rej(Object.assign(new Error(what + ' timeout'), {name: 'TimeoutError'})), ms);
+    Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
+  });
+}
+const helloWaiters = [];
+function firstHello(ms) {
+  if (helloSeen) return Promise.resolve(true);
+  return deadline(new Promise(r => helloWaiters.push(r)), ms, 'hello').catch(() => false);
+}
+
+// ---- display: the orb (orb.js, WP5) on black; the status word only with show_word (debug, hello cfg.word)
+let shown = '';
+const orb = RideOrb({root: $('orb'), level: $('orbl'), motion: $('orbm')});
+const clock = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+// P4: the orb moves with the bike (orb_motion.js). Gain from hello cfg.orb_motion (0 = off); reduced motion = off.
+// gdown: iOS Safari's accelerometer vector points down at rest, the W3C one (Android) up.
+const reducedMotion = () => { try { return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+const screenAngle = () => { const s = typeof screen !== 'undefined' && screen.orientation; return s && Number.isFinite(s.angle) ? s.angle : (typeof window.orientation === 'number' ? window.orientation : 0); };
+const orbMotion = RideOrbMotion({gain: rideOrbMotionGain({}, reducedMotion()), gdown: !/Android/.test(navigator.userAgent || '')});
+orb.setMotion(orbMotion);
+function render() {
+  const d = C.display();
+  if (typeof gate !== 'undefined' && gate) gate.setSpeaking(d === 'speaking');
+  if (d === shown) return;
+  shown = d;
+  orb.show(d);
+  $('w').textContent = cfg.word === true ? d : '';
+  if ('mediaSession' in navigator) {
+    try { navigator.mediaSession.metadata = new MediaMetadata({title: 'Hermes-Ride · ' + d, artist: 'Hermes-Ride'}); } catch (e) {}
+  }
+}
+
+// ---- the one <audio> queue (client_state.js): cues and clips come from Cache Storage as blob URLs
+const C = RideClient({
+  audio: A,
+  makeUrl: (bytes, mime) => URL.createObjectURL(new Blob([bytes], {type: mime})),
+  revoke: u => URL.revokeObjectURL(u),
+  cueUrl: p => cueUrls[p] || p,
+  send, render, tone: g => onTone(g), toneStop: stopTone,
+  cue: on => gate.hold(on),
+  envelope: rideWavEnvelope,             // Fix F: the orb follows her voice (WAV segments)              // Fix A: our own cues and clips never reach Scribe or the wake spotter
+});
+function onTone(gain) { orb.tone(); playTone(gain); }   // a doo-doo tick: the thinking orb breathes with it (WP5)
+// R3-4: the extended-work tone. Hermes Desktop's voice-mode thinking sound (apps/desktop/src/lib/thinking-sound.ts,
+// mirrored by tools/voice_mode.py): a sine "blub" of 0.16 s, pitch gliding to x0.72, 20 ms attack, exponential decay,
+// peak 0.08, pitches G4 392 Hz / E4 329.6 Hz. Here one tick is that pair ("doo, doo", 0.45 s apart) every 4-6 s
+// (client_state.js), peak 0.16 x cue_gain (= Hermes's 0.08 at the default 0.5). It goes straight to the AudioContext,
+// outside the <audio> queue, so it never delays a reply; stopTone() cuts a pair that is still sounding.
+let toneBus = null;
+function blub(freq, at, peak, out) {
+  const t0 = ac.currentTime + 0.01 + at, dur = 0.16, osc = ac.createOscillator(), env = ac.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, t0);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.72, t0 + dur);
+  env.gain.setValueAtTime(0.0001, t0);
+  env.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
+  env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(env); env.connect(out);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+function playTone(gain) {
+  const peak = 0.16 * gain;
+  if (!ac || ac.state !== 'running' || !(peak > 0.0001)) return;
+  stopTone();
+  try {
+    toneBus = ac.createGain(); toneBus.connect(ac.destination);
+    blub(392, 0, peak, toneBus); blub(329.6, 0.45, peak, toneBus);
+  } catch (e) { stopTone(); }
+}
+function stopTone() { if (toneBus) { try { toneBus.disconnect(); } catch (e) {} toneBus = null; } }
+const cueBlobs = {}, cueGainOf = {};      // path -> the cached file; path -> the gain its cueUrls entry has
+async function preload(paths) {          // tap 1: cues + clips into Cache Storage, then in-memory blob URLs
+  let cache = null;
+  try { cache = await caches.open('hermes-ride-cues-v5'); } catch (e) {}
+  await Promise.all(paths.map(async p => {
+    try {
+      let r = cache && await cache.match(p);
+      if (!r) { r = await fetch(p, {credentials: 'same-origin', cache: 'reload'}); if (!r.ok) return; if (cache) await cache.put(p, r.clone()); }
+      const b = await r.blob();
+      cueBlobs[p] = b; cueUrls[p] = URL.createObjectURL(b); cueGainOf[p] = 1;
+    } catch (e) {}
+  }));
+  applyCueGain();
+}
+// R3-2: cues and clips at hello.cfg.cue_gain (default 0.5), the reply voice at full level. The cached files are decoded
+// and re-encoded scaled (iOS ignores <audio>.volume); a cue that can't be decoded keeps its file's level, said once.
+let gainBusy = null, gainNoted = false;
+function applyCueGain() {
+  if (gainBusy) return gainBusy.then(applyCueGain);
+  const g = rideCueGain(cfg);
+  const todo = Object.keys(cueBlobs).filter(p => cueGainOf[p] !== g);
+  if (!todo.length || !ac || typeof ac.decodeAudioData !== 'function') return Promise.resolve();
+  gainBusy = Promise.all(todo.map(async p => {
+    if (g === 1) { cueUrls[p] = URL.createObjectURL(cueBlobs[p]); cueGainOf[p] = 1; return; }
+    try {
+      const buf = await deadline(ac.decodeAudioData(await cueBlobs[p].arrayBuffer()), 4000, 'decode');
+      cueUrls[p] = URL.createObjectURL(new Blob([rideScaledWav(buf, g)], {type: 'audio/wav'})); cueGainOf[p] = g;
+    } catch (e) {
+      cueGainOf[p] = g;
+      if (!gainNoted) { gainNoted = true; diag('cue volume not applied (' + (e && e.name) + ')'); }
+    }
+  })).then(() => { gainBusy = null; });
+  return gainBusy;
+}
+const DEFAULT_ASSETS = [...RIDE_DEFAULT_CUES.wake, RIDE_DEFAULT_CUES.thinking, RIDE_DEFAULT_CUES.done,
+                        RIDE_DEFAULT_CUES.mute, RIDE_DEFAULT_CUES.unmute, RIDE_DEFAULT_CUES.reset, RIDE_DEFAULT_CUES.reset_failed,
+                        ...Object.values(RIDE_DEFAULT_CLIPS)];
+
+// ---- WebSocket: reconnect 1, 2, 4, 8, 15 s (capped); clips for a long outage are local (client_state.js)
+function connect() {
+  ws = new WebSocket(new URL('ws', location.href).href.replace(/^http/, 'ws'));
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    wsOpen = true; tries = 0; helloSeen = false;
+    sendHello();
+    send({t: 'gate', s: gate.state()});
+    C.onOpen(); stt.linkUp(); flushTelemetry(true);
+  };
+  ws.onmessage = ev => {
+    if (typeof ev.data !== 'string') { C.onBinary(ev.data); return; }
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.t === 'hello') {
+      cfg = m.cfg || {}; route = cfg.stt_route === 'server' ? 'server' : 'phone'; configureGate(); helloSeen = true;
+      wakeRe = rideWakeRe((cfg.wake || {}).alts);      // 10 Nov: the configured wake word (default "Hey Hermes")
+      dbl.configure({interval_ms: rideDoubleTapMs(cfg)}); orb.setDesign(rideOrbDesign(cfg)); shown = '';
+      orbMotion.setGain(rideOrbMotionGain(cfg, reducedMotion()));
+      linkEpoch = m.epoch;
+      helloWaiters.splice(0).forEach(r => r(true));
+      const extra = [].concat(cfg.cues ? [...cfg.cues.wake, cfg.cues.thinking, cfg.cues.done, cfg.cues.mute, cfg.cues.unmute,
+                                           cfg.cues.reset, cfg.cues.reset_failed,
+                                           cfg.cues.mute || RIDE_DEFAULT_CUES.mute, cfg.cues.unmute || RIDE_DEFAULT_CUES.unmute] : [],
+                              cfg.clips ? Object.values(cfg.clips) : []).filter((p, i, all) => p && !cueUrls[p] && all.indexOf(p) === i);
+      if (extra.length) preload(extra); else applyCueGain();
+    }
+    C.onMessage(m);
+    if (m.t === 'hello') listening();
+    if (m.t === 'token' || m.t === 'token_error' || m.t === 'stt_backoff') stt.onServer(m);
+    else if (m.t === 'telemetry_ack') onAck(m);
+    else if (m.t === 'wake_hit') { if (gate.state() === 'probe') { gate.probeResult(true); C.wake(); } }   // server route
+    else if (m.t === 'wake_miss') gate.probeResult(false);
+    else if (m.t === 'heard') gate.heard();          // R3-5, server route: Scribe hears speech, keep the window open
+    else if (m.t === 'stt') { if (m.epoch === linkEpoch) onServerStt(m); }   // AUD-R3-06, server route
+    else if (m.t === 'state') { if (m.s === 'thinking') gate.setBusy(true); else if (m.s === 'listening') gate.setBusy(false); }
+    else if (m.t === 'reset_done') { if (resetSent && m.epoch === linkEpoch) reloadPage(); }        // WP6
+    else if (m.t === 'reset_failed') { if (resetSent && m.epoch === linkEpoch) resetFailed(m.step); }
+  };
+  ws.onclose = ev => {
+    wsOpen = false; helloSeen = false; sttProven = false; srvStt = null; linkEpoch = null;
+    C.onClose(); stt.linkDown(); gate.setBusy(false); pcmBatch = [];
+    if (ev.code === 4000) { replaced = true; return; }      // another page took over
+    const delay = [1000, 2000, 4000, 8000, 15000][Math.min(tries++, 4)];
+    setTimeout(connect, delay);
+  };
+}
+
+// ---- STT: direct to Scribe (stt_route=phone) or gated PCM to the server (stt_route=server)
+const refr = RideRefractory(2000);
+let sttProven = true;                    // phone route: a Scribe session started since the last link loss / backoff
+const stt = RideStt({
+  WebSocket, send,
+  onPartial: text => { if (!muted && gate.state() !== 'probe') { gate.heard(); send({t: 'partial', text}); } },   // R3-5
+  onCommitted: (text, lang, sttS) => onCommitted(text, lang, sttS),
+  onStatus: s => { if (s === 'ready') sttProven = true; else if (s === 'backoff') sttProven = false; listening(); showMic(); },
+  onSessionFail: () => { if (gate.state() === 'awake') C.sttDown(); },   // R2: awake and Scribe did not start: say so
+}, window.RIDE_STT_OPTS);                // deadlines/backoffs override (tests)
+// AUD-V2-01/02: is recognition really up? Link + hello, no STT backoff, and a Scribe session that has really started
+// (session_started) since the last link loss, STT backoff or start failure, and is ready while the gate is open. Phone
+// route: the page's own session (stt.js). Server route (AUD-R3-06): the server's session, as its {t:'stt'} frames
+// report it. The 'back' clip and the 'listening' display wait for this; the link coming back alone is not enough (fix
+// round 2, R2: with the gate closed, a backoff expiry or a reconnect no longer counts as recovered recognition).
+function listening() {
+  const s = stt.status();
+  const up = wsOpen && helloSeen && s !== 'backoff';
+  const ready = route === 'phone' ? s === 'ready' : srvStt === 'ready';
+  C.recognition(up && sttProven && (!gate.isOpen() || ready));
+}
+function onServerStt(m) {                // connecting | ready | failed (why) | closed
+  srvStt = m.s;
+  if (m.s === 'ready') sttProven = true;
+  else if (m.s === 'failed') { sttProven = false; if (gate.state() === 'awake') C.sttDown(); }
+  listening(); showMic();
+}
+// R5: the English word rule of ride_logic.count_words (typographic apostrophes count like ASCII ones)
+const APOS = /[\u2018\u2019\u201a\u201b\u02b9\u02bb\u02bc\u02bd`\u00b4\u2032\u2035\ua78c]/g;
+function words(s) {
+  const t = String(s).replace(APOS, "'").normalize('NFKC').replace(APOS, "'");
+  return (t.match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu) || []).length;
+}
+function onCommitted(text, lang, sttS) {
+  if (muted) return;                     // round 3: a transcript that arrives after the mute is not sent
+  flushTelemetry(true);                  // AUD-V2-11: the server has every record before this utterance's turn
+  const w = rideMatchWake(text, wakeRe);
+  if (gate.state() === 'probe') {        // transcript engine: the wake word must open the utterance
+    if (w.hit && refr.accept(Date.now())) {
+      gate.probeResult(true); C.wake();
+      send({t: 'wake', w: wakeName(), score: 1});
+      if (words(w.rest)) send({t: 'committed', text: w.rest, lang});
+    } else {
+      send({t: 'no_wake', words: words(text)}); gate.probeResult(false);
+    }
+    return;
+  }
+  const rest = w.hit ? w.rest : text;    // the pre-roll carries the wake phrase too
+  if (words(rest)) send({t: 'committed', text: rest, lang});
+}
+// Server route: gated PCM leaves in 100 ms batches. Under backpressure (or with the link down) frames wait in a
+// bounded backlog (1 s, oldest dropped) that drains batch by batch (AUD-V2-03); link loss clears it.
+const PCM_BATCH = 5, PCM_MAX = 50;
+let pcmBatch = [];
+function sendPcm(f) {
+  if (!wsOpen) { pcmBatch = []; return; }
+  pcmBatch.push(f);
+  if (pcmBatch.length > PCM_MAX) pcmBatch.splice(0, pcmBatch.length - PCM_MAX);
+  while (pcmBatch.length >= PCM_BATCH && ws.bufferedAmount < 64000) {
+    const b = pcmBatch.splice(0, PCM_BATCH), all = new Int16Array(b.reduce((n, x) => n + x.length, 0));
+    let off = 0; for (const x of b) { all.set(x, off); off += x.length; }
+    ws.send(all.buffer);
+  }
+}
+const gate = RideGate({engine: 'sherpa'}, ev => {
+  if (ev.e === 'open') { if (route === 'phone') stt.open(); listening(); showMic(); }
+  else if (ev.e === 'close') { stt.close(); pcmBatch = []; if (route === 'server') srvStt = null; listening(); flushUsage(); showMic(); }
+  else if (ev.e === 'audio') {
+    if (route === 'phone') stt.audio(ev.pcm);
+    else sendPcm(ev.pcm);
+  } else if (ev.e === 'vad') send({t: 'vad', s: ev.s, at: ev.at});
+  else if (ev.e === 'state') {
+    C.setGate(ev.s);
+    send({t: 'gate', s: ev.s});          // AUD-V2-06: the server route checks the wake word itself while probing
+    if (ev.s !== 'sleep') sendSensors();
+    if (ev.s === 'awake') flushTelemetry(true);
+  }
+});
+// AUD-V2-12: Scribe audio is billed whether or not it became a transcript: report it as it is sent (1 Hz and when
+// the gate closes); while the link is down it stays counted in stt.js until it can be sent
+function flushUsage() {
+  if (!wsOpen) return;
+  const s = stt.takeUsageS();
+  if (s > 0) send({t: 'stt_usage', s});
+}
+function configureGate() {               // cfg from hello: thresholds, pre-roll, window length
+  const v = cfg.vad || {};
+  gate.configure({base_db: v.base_db, k: v.k, cap_db: v.cap_db, hangover_ms: v.hangover_ms,
+                  preroll_ms: v.preroll_ms, wake_preroll_ms: v.wake_preroll_ms, window_s: cfg.window_s});
+}
+
+// ---- wake engine: sherpa if it loads within 8 s, else transcript (and sherpa as soon as it is ready, Fix D)
+// 10 Nov (Hermes-Ride): the wake word is a server setting: hello.cfg.wake {word, name, alts, kws}
+let wakeRe = RIDE_WAKE_RE;
+const wakeName = () => String((cfg.wake || {}).name || 'hermes').slice(0, 24);
+let wakeEngine = null, wakeLoad = null;     // wakeLoad: the pending sherpa load (Stop cancels it, AUD-R3-02)
+function diag(text) {                   // information only: kept off the screen (no text for the obvious)
+  const d = $('diag');                  // one line per message, the last 20 kept
+  d.textContent = (d.textContent ? d.textContent + '\n' : '') + text;
+  const lines = d.textContent.split('\n');
+  if (lines.length > 20) d.textContent = lines.slice(-20).join('\n');
+}
+const wakeStatus = diag;
+// Fix D (item 6): a sherpa load that misses load_timeout_ms keeps going (transcript meanwhile) and is adopted when it
+// is ready; wake_ms (load start to ready) goes to the server in hello caps
+let wakeMs = null;
+function sendHello() {
+  const caps = {wake: engineName, stt: route};
+  if (wakeMs !== null) caps.wake_ms = wakeMs;
+  send({t: 'hello', v: 2, ua: navigator.userAgent, ride: RIDE, caps});
+}
+function useEngine(name, eng) {
+  engineName = name; wakeEngine = eng;
+  if (wakeEngine) wakeEngine.onWake = score => {
+    if (capStopped || muted) return;     // round 3: a hit queued in the worker when the mute came is ignored
+    if (gate.state() === 'sleep' && refr.accept(Date.now())) wakeNow(score);
+  };
+  if (wakeEngine) wakeEngine.onFail = err => {     // AUD-V2-09: the spotter died after loading: VAD probes from now on
+    if (capStopped) return;
+    wakeEngine = null; engineName = 'transcript'; gate.setEngine(engineName);
+    wakeStatus('wake ready: transcript (sherpa failed: ' + String(err && err.message || err).slice(0, 60) + ')');
+    sendHello();
+  };
+  gate.setEngine(engineName);
+}
+function adoptLate(eng, ms) {             // the sherpa load finished after the fallback: switch to it, unless stopped
+  wakeLoad = null;
+  if (capStopped || wakeEngine) { try { eng.stop(); } catch (e) {} return; }
+  wakeMs = Math.round(ms);
+  useEngine('sherpa', eng);
+  wakeStatus('wake ready: sherpa (late, ' + wakeMs + ' ms)');
+  sendHello();
+}
+async function startWake() {
+  diag('wake starting…');
+  if (!(await firstHello(WAIT.hello))) wakeStatus('no server config yet: default wake engine');
+  if (capStopped) return;
+  const w = (cfg.wake || {});
+  const r = await rideChooseEngine(w.engine || 'sherpa',
+    () => (wakeLoad = rideSherpaEngine({base: w.model_url || 'vendor/', threshold: w.threshold, score: w.score,
+                                        keywords: rideKwsName(w)})), w.load_timeout_ms || 8000,
+    null, adoptLate);
+  if (!r.pending) wakeLoad = null;         // a pending load stays cancellable by Stop (AUD-R3-02)
+  if (capStopped) { if (r.engine) r.engine.stop(); return; }   // AUD-R3-02: loaded after Stop: never adopted
+  if (r.ms != null) wakeMs = Math.round(r.ms);
+  useEngine(r.name, r.engine);
+  wakeStatus('wake ready: ' + r.name + (r.error ? ' (' + r.error + ')' : '') +
+    (!helloSeen ? ' · no server config yet: default' : ''));
+  sendHello();
+}
+
+// ---- mic: AudioWorklet 20 ms frames -> gate (+ the wake spotter while asleep)
+let ac = null, lastFrame = 0, frameN = 0, micStarted = 0, nomicSaid = false, micTracks = [], micNode = null;
+const stopStream = st => { try { st.getTracks().forEach(t => t.stop()); } catch (e) {} };
+// AUD-R3-01: Stop is terminal. capGen is the stop generation: Stop bumps it and cancels a queued recovery timer; an
+// attempt that started before Stop checks it after every await (mic, worklet, resume), releases what it acquired and
+// never adopts the track or forwards a frame.
+let capStopped = false, capGen = 0, recoverTimer = null, micSrcs = [];   // every source node ever made, so Stop can cut all of them
+const stoppedErr = () => Object.assign(new Error('mic stopped'), {name: 'AbortError'});
+async function startMic() {
+  if (capStopped) throw stoppedErr();
+  const gen = capGen, fenced = () => gen !== capGen;
+  const gum = navigator.mediaDevices.getUserMedia({audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+  let stream;
+  try { stream = await deadline(gum, WAIT.mic, 'mic'); }
+  catch (e) { Promise.resolve(gum).then(stopStream, () => {}); throw e; }   // a late mic is released
+  if (fenced()) { stopStream(stream); throw stoppedErr(); }
+  const tr = stream.getAudioTracks()[0];
+  // R1: a failed attempt releases everything it acquired (this stream, a context it created), so tap 1 again starts
+  // from scratch with exactly one live mic stream and one AudioContext
+  let fresh = null, node = null;
+  try {
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;      // R3-7: older WebKit has the prefix only
+      if (!AC) throw Object.assign(new Error('no Web Audio in this browser'), {name: 'NotSupportedError'});
+      fresh = new AC();
+      if (!fresh.audioWorklet) throw Object.assign(new Error('AudioWorklet not supported (iOS 14.5 or newer needed)'), {name: 'NotSupportedError'});
+      await deadline(fresh.audioWorklet.addModule('worklet.js'), WAIT.worklet, 'worklet');
+      if (fenced()) throw stoppedErr();
+    }
+    const ctx = ac || fresh;
+    node = new AudioWorkletNode(ctx, 'pcm16-writer');
+    node.port.onmessage = e => {
+      if (fenced() || capStopped) return;
+      const pcm = new Int16Array(e.data.pcm);
+      lastFrame = Date.now(); frameN++;
+      if (tapShown) reviveTap(false);    // Fix B: frames flow again: the Tap overlay goes
+      if (muted) return;                 // round 3: muted: the frame is counted (watchdog) and dropped: no spotter, gate or orb
+      if (wakeEngine && gate.state() === 'sleep' && !gate.held()) wakeEngine.feed(pcm.slice());
+      gate.feed(pcm, e.data.db);
+      // WP5: the frame level the gate just used (listening). Fix F: while she speaks a WAV segment, her level at
+      // audio.currentTime instead (an MP3 segment has no curve: nothing written, the CSS pulse runs)
+      if (C.display() === 'speaking') {
+        const np = C.nowPlaying();
+        if (np && np.env) orb.level(np.env[Math.floor((A.currentTime || 0) / 0.05)], clock());
+      } else orb.level(gate.level(), clock());
+    };
+    const src = ctx.createMediaStreamSource(stream); micSrcs.push(src); src.connect(node);
+    await deadline(ctx.resume(), WAIT.resume, 'audio resume');
+    if (fenced()) throw stoppedErr();
+  } catch (e) {
+    if (node) { node.port.onmessage = null; try { node.disconnect(); } catch (x) {} }
+    stopStream(stream);
+    if (fresh) try { Promise.resolve(fresh.close()).catch(() => {}); } catch (x) {}
+    throw e;
+  }
+  if (fresh) {
+    ac = fresh;
+    ac.onstatechange = onAcState;        // round 3: the context leaving / returning to running is an interruption signal
+  }
+  micTracks.push(...stream.getAudioTracks()); micNode = node;
+  tr.addEventListener('ended', () => {     // the OS ended the track: one recovery attempt in 1 s, unless stopped
+    showMic();
+    if (capStopped || fenced() || recoverTimer) return;
+    // D2: through the revive path (one attempt at a time, the old capture released first), never a second startMic()
+    recoverTimer = setTimeout(() => { recoverTimer = null; if (!capStopped && !fenced()) micRevive('ended'); }, 1000);
+  });
+  // Round 3, h2: iOS mutes the track during a call / app switch and frames can keep flowing as silence. The events are
+  // the earliest signal: a mute starts the silence clock, an unmute revives at once.
+  for (const t of stream.getAudioTracks()) {
+    t.addEventListener('mute', () => { if (!capStopped && !mutedSince) { mutedSince = Date.now(); if (!outageAt) outageAt = Date.now(); showMic(); } });
+    t.addEventListener('unmute', () => { mutedSince = 0; showMic(); if (!capStopped) micRevive('unmute'); });
+  }
+  micStarted = Date.now(); outageAt = 0; nomicSaid = false;
+  showMic();
+  return tr.label;
+}
+// ---- back from the background (rider feedback: "I can't hear the mic" after switching apps). iOS interrupts the
+// AudioContext and may end or mute the track while the page is hidden; the 'ended' recovery above runs once, often while
+// still hidden, and fails. When the page is visible again (or frames stop while visible): resume the context, wait
+// revive_ms for a frame, and if none comes, release the old track and node and capture afresh. One attempt at a time;
+// never after Stop; a muted page stays muted (the flag is page state, the fresh worklet handler reads it).
+let reviving = null, reviveNext = 0, reviveQueued = null, outageN = 0, outageAt = 0, mutedSince = 0;
+const MIC_WHY = ['return', 'pageshow', 'no frames', 'tap', 'unmute', 'statechange', 'muted', 'retry'];
+const micWhy = w => MIC_WHY.includes(w) ? w : 'no frames';
+const acState = c => !c ? 'none' : (['running', 'suspended', 'interrupted', 'closed'].includes(c.state) ? c.state : 'none');
+function trackState() {
+  if (!micTracks.length) return 'none';
+  if (micTracks.every(t => t.readyState === 'ended')) return 'ended';
+  if (micTracks.every(t => t.muted)) return 'muted';
+  return 'live';
+}
+// One evidence frame per attempt (worker B logs it as a `mic` event; fixed strings only, no free text). A long call
+// retries every 10 s, and the server keeps 30 events per connection: send the first few and every success, so the
+// line that says the mic came back is never the one that got dropped (Lana's review, 11 Nov).
+const MIC_EVIDENCE_MAX = 5;
+function micEvidence(why, ok, acBefore, gapMs, n) {
+  const gap_s = +(Math.max(0, gapMs) / 1000).toFixed(1);
+  if (ok || n <= MIC_EVIDENCE_MAX) send({t: 'mic', ev: 'revive', why, ok: !!ok, ac: acBefore, track: trackState(), gap_s, n});
+  diag('mic ' + why + (ok ? ' ok' : ' failed') + ' (ac ' + acBefore + ', track ' + trackState() + ', gap ' + gap_s + ' s, try ' + n + ')');
+}
+// A context that does not come back is replaced, not reused: close it and forget it, so startMic() (and the next tap)
+// builds a fresh AudioContext + worklet (round 3; a context left interrupted / suspended needs a gesture iOS may refuse).
+function dropAudioContext() {
+  const old = ac; ac = null;
+  if (toneBus) { try { toneBus.disconnect(); } catch (e) {} toneBus = null; }
+  if (old) { try { old.onstatechange = null; } catch (e) {} try { Promise.resolve(old.close && old.close()).catch(() => {}); } catch (e) {} }
+  micSrcs.forEach(n => { try { n.disconnect(); } catch (e) {} }); micSrcs = [];
+  if (micNode) { const n = micNode; micNode = null; try { n.port.onmessage = null; } catch (e) {} try { n.disconnect(); } catch (e) {} }
+}
+function onAcState() {                   // round 3, h1: the state transition itself is the signal, not a 10 s timer
+  if (capStopped || !ac) return;
+  const st = ac.state;
+  if (st === 'running') { if (!mutedSince) micRevive('statechange'); }
+  else if (st === 'interrupted' || st === 'suspended') { if (!outageAt) outageAt = Date.now(); micRevive('statechange'); }
+}
+// One attempt at a time; a call that arrives during an attempt is remembered and run once when it finishes. The retry
+// ladder (2, 4, 8, then every 10 s) is the watchdog's (MW.ladder); a signal (visibilitychange, pageshow, a designated
+// tap, a track unmute, a state change) bypasses the wait.
+function micRevive(why) {
+  if (capStopped || !micStarted || document.visibilityState === 'hidden') return null;
+  why = micWhy(why);
+  if (reviving) { reviveQueued = why; return reviving; }
+  const gen = capGen, acBefore = acState(ac), gap0 = Date.now() - Math.max(lastFrame, micStarted);
+  if (!outageN) outageAt = Date.now();
+  const attempt = ++outageN;
+  reviveNext = Date.now() + MW.ladder[Math.min(attempt - 1, MW.ladder.length - 1)];
+  let okOut = false;                       // a signal that arrived during a successful attempt is not a second attempt
+  reviving = (async () => {
+    const n0 = frameN;
+    let ok = false;
+    try { if (ac && ac.state !== 'running' && ac.state !== 'closed') await deadline(ac.resume(), WAIT.resume, 'audio resume'); }
+    catch (e) { diag('revive: resume failed (' + (e && e.name) + ')'); }
+    // A context that did not come back is replaced, except while iOS reports it as 'interrupted': that is the call /
+    // app-switch state, and throwing the gesture-unlocked context away on the first attempt is what forces a Tap.
+    // Kept for the first two attempts, replaced from the third (about 6 s into the outage) if it still will not run.
+    if (ac && ac.state !== 'running' && ac.state !== 'closed' && (ac.state !== 'interrupted' || attempt >= 3)) {
+      dropAudioContext();                // did not come back: startMic builds one
+    }
+    await new Promise(r => setTimeout(r, WAIT.revive));
+    if (capStopped || gen !== capGen) return;
+    const live = micTracks.some(t => t.readyState !== 'ended' && !t.muted);
+    if (frameN > n0 && live) { ok = true; diag('mic ok after ' + why); }
+    else {
+      if (micNode) { micNode.port.onmessage = null; try { micNode.disconnect(); } catch (e) {} micNode = null; }
+      micTracks.forEach(t => { try { t.stop(); } catch (e) {} });
+      micTracks = [];
+      let n1 = frameN;
+      try { diag('mic restarted after ' + why + ': ' + (await startMic())); nomicSaid = false; n1 = frameN; }
+      catch (e) { diag('mic restart failed after ' + why + ' (' + (e && e.name) + ')'); if (!capStopped) reviveTap(true); }
+      if (!capStopped && gen === capGen) {
+        // Fix B: iOS may refuse a fresh mic without a tap: no frame revive_tap ms after the restart -> the Tap overlay
+        await new Promise(r => setTimeout(r, WAIT.revive_tap));
+        if (frameN > n1) ok = true;
+        else { diag('no frames after the restart: tap needed'); reviveTap(true); }
+      }
+    }
+    if (capStopped || gen !== capGen) return;
+    okOut = ok;
+    micEvidence(why, ok, acBefore, gap0, attempt);
+  })().finally(() => {
+    reviving = null; showMic();
+    // A queued signal means "try again"; when this attempt already succeeded there is nothing to try, and re-running
+    // it here is what made one interruption cost two attempts (and two evidence frames).
+    if (reviveQueued && !capStopped && !okOut) { const w = reviveQueued; reviveQueued = null; setTimeout(() => micRevive(w), 0); }
+    else reviveQueued = null;
+  });
+  return reviving;
+}
+// Any tap while the mic is dead is the gesture iOS wants: resume, unlock the idle <audio>, revive (round 3).
+function micDead() {
+  return tapShown || (micStarted > 0 && document.visibilityState !== 'hidden' && Date.now() - Math.max(lastFrame, micStarted) >= MW.frames_ms);
+}
+function gestureUnlock() {
+  try { if (ac && ac.state !== 'running' && ac.state !== 'closed') Promise.resolve(ac.resume()).catch(() => {}); } catch (e) {}
+  try { if (A.paused !== false) { A.src = 'silence.mp3'; Promise.resolve(A.play()).catch(() => {}); } } catch (e) {}
+}
+function gestureRevive() {
+  gestureUnlock();                       // inside the gesture, before any await
+  if (capStopped || !micStarted) return null;
+  reviveNext = 0;
+  return micRevive('tap');
+}
+document.addEventListener('pointerdown', () => { if (!capStopped && micStarted && micDead()) gestureRevive(); }, {passive: true});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'hidden') micRevive('return'); });
+// Fix B: the fallback when a revive got no frame: the Tap orb over everything (setup's look). Its click runs inside the
+// gesture: resume the AudioContext, unlock <audio> (only if it is idle: never cut a cue or reply), then revive.
+let tapShown = false;
+function reviveTap(on) {
+  tapShown = !!on && !capStopped;
+  const el = $('rv'); if (el) el.hidden = !tapShown;
+}
+$('rvb').onclick = gestureRevive;
+addEventListener('pageshow', () => micRevive('pageshow'));
+// ---- R3-6: privacy. The indicator says what the mic is doing; 'off' only once every track has really ended.
+// stopCapture() stops capture for good on this page: gate asleep, STT closed, worklet detached, track.stop() on every
+// mic track; reload to restart. Round 3: nothing on the page calls it any more (the button and the lock screen pause /
+// stop mute instead, see setMuted); it stays as the internal hard stop with its tests (page_stop_test.js).
+function micState() {                   // AUD-R3-02: STT/gate activity first: 'off' never hides an open STT
+  if (!micTracks.length) return '';
+  if (gate.isOpen() || stt.stats().open) return 'live';
+  if (micTracks.every(t => t.readyState === 'ended')) return 'off';
+  return muted ? 'muted' : 'local';
+}
+function showMic() { const el = $('mic'); if (el) el.className = micState(); }
+function stopCapture(why) {
+  if (capStopped) return;
+  capStopped = true; capGen++;
+  if (recoverTimer) { clearTimeout(recoverTimer); recoverTimer = null; }
+  if (micNode) { micNode.port.onmessage = null; try { micNode.disconnect(); } catch (e) {} }
+  // AUD-R3-02: the wake spotter (loaded or still loading) is terminated, so a hit queued in it can't reopen STT
+  if (wakeLoad && typeof wakeLoad.cancel === 'function') try { wakeLoad.cancel(); } catch (e) {}
+  if (wakeEngine) { try { wakeEngine.stop(); } catch (e) {} wakeEngine = null; }
+  gate.sleep(); gate.dropPreroll(); stt.close(); pcmBatch = []; C.toneStop(); flushUsage(); reviveTap(false);
+  // iOS WebKit: a stopped track alone can leave capture alive while the AudioContext still runs. Cut the whole chain:
+  // disable + stop every track, disconnect every source and the worklet, close the context.
+  micTracks.forEach(t => { try { t.enabled = false; } catch (e) {} try { t.stop(); } catch (e) {} });
+  micSrcs.forEach(n => { try { n.disconnect(); } catch (e) {} }); micSrcs = [];
+  if (ac) { try { ac.onstatechange = null; Promise.resolve(ac.close && ac.close()).catch(() => {}); } catch (e) {} }
+  try { orb.show('sleep'); } catch (e) {}
+  micStarted = 0;
+  const off = micTracks.length > 0 && micTracks.every(t => t.readyState === 'ended');
+  $('status').textContent = off ? 'mic off (' + why + '): reload the page to start again'
+                                : 'mic stop failed: close this tab to be sure';
+  const b = $('mute'); if (b) b.disabled = true;      // nothing left to mute or unmute
+  showMic();
+}
+// ---- Round 3 (A2; rider feedback: "mute used to work, the stop mic does not"): MUTE / UNMUTE, one tap on #mute (where the
+// stop button was), or the lock screen / Control Centre pause or stop button. A soft, page-only state: gate asleep,
+// pre-roll dropped, STT closed, no PCM batch kept; the worklet handler counts every frame (the mic watchdog stays quiet)
+// and drops it before the wake spotter, the gate and the orb level; a late transcript, a wake-engine hit and the double
+// tap are ignored; a reply that is playing keeps playing. Nothing leaves the phone. The mic tracks are never stopped or
+// disabled, so unmute is instant (back to sleep: the wake word and the double tap work at once) and needs no reload.
+// It survives a mic revive and a reconnect; a reload (the reset) unmutes. Telemetry and sensors keep going.
+let muted = false;
+function paintMute() {
+  const b = $('mute'); if (!b) return;
+  b.textContent = muted ? 'UNMUTE' : 'MUTE'; b.classList.toggle('on', muted); b.setAttribute('aria-pressed', String(muted));
+}
+function setMuted(on) {
+  // D4: once the mic has started, not "while a track is held": a revive empties micTracks for its whole getUserMedia
+  // wait, and a MUTE pressed then must not be lost (the fresh worklet handler reads the flag)
+  if (!micStarted || capStopped || !!on === muted) return;
+  muted = !!on;
+  if (muted) { gate.sleep(); gate.dropPreroll(); stt.close(); pcmBatch = []; flushUsage(); }
+  if (wakeEngine) try { wakeEngine.reset(); } catch (e) {}
+  C.setMuted(muted); listening(); showMic(); paintMute();
+  diag(muted ? 'muted' : 'unmuted');
+}
+// ---- Tap to wake (10 Nov): a double tap anywhere (gesture.js) wakes Lana exactly like "Hey Lana": wakeNow() below
+// is the one wake path, the wake word's own. Only from sleep, or from the transcript engine's probe; awake, thinking
+// or speaking it does nothing (it never cuts her off), and muted or after a hard stop it does nothing. The one mic
+// control is the MUTE button. {t:'wake'} is unchanged (no protocol change), so turns.jsonl cannot tell a tap from a
+// spoken wake; score 1 as for the transcript engine.
+function wakeNow(score) {
+  C.wake(); gate.wake(); send({t: 'wake', w: wakeName(), score}); if (wakeEngine) wakeEngine.reset();
+}
+function tapWake() {
+  if (!micTracks.length || capStopped || muted) return;
+  const st = gate.state();
+  if ((st === 'sleep' || st === 'probe') && refr.accept(Date.now())) wakeNow(1);
+}
+const dbl = RideDoubleTap({}, tapWake);
+// ---- WP6 (D5, P6): reset (reset.js). Drag up from the grabber, hold the red bar 3 s: {t:'reset', epoch} once and a
+// short cue; the server interrupts the turn, starts a new conversation (the gateway's /new) and resets its own state,
+// then {t:'reset_done'} reloads the page (or 5 s pass without an answer: reload anyway; with the link down there is
+// nothing to send and the reload is the reset). {t:'reset_failed'}: said on screen with its own cue, no reload, the bar
+// can be held again. After the reload iOS needs the two setup taps again; the setup screen says so (sessionStorage).
+const RWAIT = Object.assign({}, RIDE_RESET_DEFAULTS, window.RIDE_RESET_WAIT || {});
+let resetSent = false, resetT = null, reloading = false;
+function inside(node, id) {
+  const top = $(id);
+  for (let n = node, i = 0; n && top && i < 64; n = n.parentElement || n.parentNode, i++) if (n === top) return true;
+  return false;
+}
+const rst = RideReset(RWAIT, {
+  isGrab: t => inside(t, 'grab'), isBar: t => inside(t, 'resetbar'),
+  show: on => { $('rpanel').hidden = !on; $('reveal').classList.toggle('open', !!on); },
+  fill: on => $('resetbar').classList.toggle('holding', !!on),
+  fire: resetNow,
+});
+$('resetfill').style.transitionDuration = RWAIT.hold_ms + 'ms';
+function resetNow() {
+  resetSent = true;
+  C.resetCue(true);
+  try { sessionStorage.setItem('ride-reset', '1'); } catch (e) {}
+  diag('resetting: the page reloads, then tap the orb again');
+  if (wsOpen && linkEpoch) send({t: 'reset', epoch: linkEpoch});
+  resetT = setTimeout(reloadPage, RWAIT.reload_ms);
+}
+function reloadPage() {
+  if (reloading) return;
+  reloading = true;
+  if (resetT) { clearTimeout(resetT); resetT = null; }
+  try { location.reload(); } catch (e) {}
+}
+function resetFailed(step) {
+  if (resetT) { clearTimeout(resetT); resetT = null; }
+  resetSent = false;
+  try { sessionStorage.removeItem('ride-reset'); } catch (e) {}
+  C.resetCue(false);
+  $('status').textContent = 'reset failed (' + String(step || 'unknown').slice(0, 24) + '): hold the bar to try again';
+  rst.rearm();
+}
+for (const k of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+  document.addEventListener(k, ev => {
+    const e = {pointerId: ev.pointerId, x: ev.clientX, y: ev.clientY, target: ev.target,
+               t: Number.isFinite(ev.timeStamp) ? ev.timeStamp : Date.now()};
+    dbl[k](e); rst[k](e);
+  }, {passive: true});
+}
+function mediaSessionStop() {            // round 3: the lock screen / Control Centre pause and stop buttons MUTE
+  if (!('mediaSession' in navigator)) return;      // (never a toggle: pressing twice stays muted; a reply keeps playing)
+  for (const a of ['pause', 'stop']) {
+    try { navigator.mediaSession.setActionHandler(a, () => setMuted(true)); } catch (e) {}
+  }
+  // Play UNMUTES (Lana's review, 11 Nov): with pause muting, a glove or headset press that pauses and then plays
+  // would otherwise leave the mic muted with no visible control on the mount to undo it.
+  try { navigator.mediaSession.setActionHandler('play', () => setMuted(false)); } catch (e) {}
+}
+setInterval(showMic, 1000);
+async function unlockAudio() {            // tap 1: a silent play() unlocks the <audio> element for cues and replies
+  A.src = 'silence.mp3';
+  try { await deadline(A.play(), WAIT.unlock, 'audio unlock'); }
+  catch (e) { try { A.pause(); } catch (x) {} throw e; }
+}
+// Round 3 (A3): the mic watchdog. Frames missing (or every track muted) while visible: revive on the 2/4/8/10 s ladder.
+// "I can't hear the mic" only after one attempt has finished and say_after_ms past the interruption, once per outage.
+function micWatchdog() {
+  if (!micStarted || capStopped) return;
+  const now = Date.now(), visible = document.visibilityState !== 'hidden';
+  const gap = now - Math.max(lastFrame, micStarted);
+  const allMuted = micTracks.length > 0 && micTracks.every(t => t.readyState !== 'ended' && t.muted);
+  if (allMuted) { if (!mutedSince) { mutedSince = now; if (!outageAt) outageAt = now; } }
+  else if (!(mutedSince && now - mutedSince < MW.muted_ms)) mutedSince = 0;
+  const silent = mutedSince > 0 && now - mutedSince >= MW.muted_ms;
+  const flowing = lastFrame > micStarted && now - lastFrame < MW.frames_ms;
+  if (flowing && !silent && !allMuted) {           // frames flow and no track is held muted: the outage is over
+    nomicSaid = false; outageN = 0; outageAt = 0; reviveNext = 0; mutedSince = 0;
+    if (!reviving) return;
+  }
+  if (!visible) return;
+  if ((gap >= MW.frames_ms || silent) && !reviving && now >= reviveNext) micRevive(silent ? 'muted' : (outageN ? 'retry' : 'no frames'));
+  if (gap > MW.say_ms && !nomicSaid && !reviving && outageN > 0 && now - outageAt >= MW.say_after_ms) { nomicSaid = true; C.noMic(); }
+}
+setInterval(micWatchdog, MW.tick_ms);
+
+// ---- telemetry: native-rate motion + GPS -> 1 Hz records, IndexedDB log, batches every 30 s
+const tel = RideTelemetry(), outbox = RideOutbox();
+let db = null, fix = null, lastMotion = 0, lastRec = null;
+function idb() {
+  return new Promise(res => {
+    try {
+      const r = indexedDB.open('hermes-ride', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('records', {keyPath: ['ride', 't']});
+      r.onsuccess = () => res(r.result); r.onerror = () => res(null); r.onblocked = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+function store(rec) { if (db) try { db.transaction('records', 'readwrite').objectStore('records').put(Object.assign({ride: RIDE}, rec)); } catch (e) {} }
+function onMotion(e) {
+  const a = e.acceleration, ig = e.accelerationIncludingGravity, rr = e.rotationRate;
+  if (!ig || ig.x == null) return;
+  const la = a && a.x != null ? [a.x, a.y, a.z] : null;
+  const g = la ? [ig.x - a.x, ig.y - a.y, ig.z - a.z] : [ig.x, ig.y, ig.z];
+  const m = {g, la: la || [0, 0, 0], rot: rr && rr.alpha != null ? [rr.beta, rr.gamma, rr.alpha] : null};
+  tel.onMotion(m);
+  lastMotion = Date.now();
+  if (orbMotion.gain()) { const t = clock(); orbMotion.feed(m, t); orb.motion(t); }   // P4: the same sample moves the orb
+}
+function startGps() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(p => {
+    const now = Date.now(), c = p.coords;
+    fix = {t: Number.isFinite(p.timestamp) ? Math.min(p.timestamp, now) : now, lat: c.latitude, lon: c.longitude,
+           acc: c.accuracy, spd: c.speed, hdg: c.heading};
+    tel.onGps(fix);
+    orbMotion.setSpeed(c.speed, clock());   // P4: the turn rate needs the speed to hold the orb's lean
+  }, () => {}, {enableHighAccuracy: true, maximumAge: 0, timeout: 30000});
+}
+function sendSensors() {                 // current values, only while awake (the "Sensors" context line)
+  const r = lastRec, now = Date.now();
+  if (!r) return;
+  const m = {t: 'sensors'};
+  if (fix && now - fix.t < 10000) { Object.assign(m, {lat: +fix.lat.toFixed(4), lon: +fix.lon.toFixed(4), acc: Math.round(fix.acc), gps_age: now - fix.t});
+    if (r.spd != null) m.spd = r.spd; if (r.hdg != null) m.hdg = r.hdg; }
+  if (now - lastMotion < 2000) {
+    if (r.lean != null) m.lean = r.lean;
+    if (r.la_peak) m.peak = +Math.hypot(...r.la_peak).toFixed(2);
+    m.mot_age = now - lastMotion;
+  }
+  if (Object.keys(m).length > 1) send(m);
+}
+let lastFlush = 0, lastSummary = Date.now();
+function flushTelemetry(force) {
+  const now = Date.now();
+  if (!wsOpen || !outbox.size() || (!force && now - lastFlush < 1000 * (cfg.telemetry_batch_s || 30))) return;
+  lastFlush = now;
+  send({t: 'telemetry', ride: RIDE, batch: outbox.batch(600)});
+}
+function onAck(m) { if (m.ride === RIDE) outbox.ack(m.upto); }
+function telemetryTick() {
+  const rec = tel.tick(Date.now());
+  if (rec) { lastRec = rec; outbox.add(rec); store(rec); gate.setSpeed(rec.spd || 0); }
+  orbMotion.setCal(tel.calibration()); orbMotion.setScreenAngle(screenAngle());   // P4: once a second, no new timer
+  if (gate.state() !== 'sleep') sendSensors();
+  flushTelemetry(false); flushUsage();
+  if (Date.now() - lastSummary >= 1000 * (cfg.summary_s || 60)) { lastSummary = Date.now(); send({t: 'summary', ride: RIDE, s: tel.minuteStats(Date.now())}); }
+}
+
+// ---- screen wake lock (screen stays on and black), re-acquired when released
+let wl = null;
+async function wakeLock() {
+  if (!('wakeLock' in navigator) || (wl && !wl.released)) return;
+  try { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => setTimeout(wakeLock, 1000)); } catch (e) {}
+}
+document.addEventListener('visibilitychange', wakeLock);
+
+// ---- the one setup tap (one tap, not two): motion permission and audio unlock are both started inside the
+// gesture, before the first await (iOS grants both only from the tap); then cue preload, mic, GPS, link, wake engine,
+// and #setup goes once motion is answered. A failed mic or audio unlock keeps the orb for another tap.
+try {                                    // WP6: this load is the reload after a reset: say why the taps are back
+  if (sessionStorage.getItem('ride-reset')) {
+    sessionStorage.removeItem('ride-reset');
+    diag('Reset done: a new conversation. iOS needs the setup tap again.');
+  }
+} catch (e) {}
+function askMotion() {
+  // R3-7: iOS grants motion only from inside the tap. Both permissions are asked before the first await; a refusal is
+  // said, not swallowed.
+  const asks = [window.DeviceMotionEvent, window.DeviceOrientationEvent]
+    .filter(K => K && typeof K.requestPermission === 'function')
+    .map(K => { try { return Promise.resolve(K.requestPermission()); } catch (e) { return Promise.reject(e); } });
+  return Promise.all(asks.map(p => p.then(v => v, e => (e && e.name) || 'error')));
+}
+$('b1').onclick = async () => {
+  $('b1').disabled = true; $('note').textContent = ''; $('tap').classList.add('gone');
+  const motion = askMotion();            // inside the gesture, like the audio unlock right after it
+  try { await unlockAudio(); }           // AUD-V2-04: without unlocked audio no cue or reply is heard
+  catch (e) { $('note').textContent = 'audio blocked (' + (e && e.name) + '): tap 1 again'; $('b1').disabled = false; $('tap').classList.remove('gone'); return; }
+  await deadline(preload(DEFAULT_ASSETS), WAIT.cache, 'cache').catch(() => {});   // cues then load on demand
+  try {
+    const label = await startMic();
+    diag('mic: ' + (label || 'ok'));
+    applyCueGain();                      // the AudioContext exists now
+  } catch (e) {
+    $('note').textContent = 'mic failed: ' + e.name + (e.name === 'NotSupportedError' ? ' (' + e.message + ')' : '') + ': tap 1 again';
+    $('b1').disabled = false; $('tap').classList.remove('gone'); return;
+  }
+  const dbp = idb();
+  db = await deadline(dbp, WAIT.idb, 'idb').catch(() => null);
+  if (!db) dbp.then(d => { db = d; });    // a slow IndexedDB is adopted when it arrives; nothing waits for it
+  startGps(); wakeLock(); connect();
+  mediaSessionStop();
+  $('mute').hidden = false; $('mute').onclick = () => setMuted(!muted); paintMute();
+  $('reveal').hidden = false;            // WP6: the grabber (reset + MUTE) from now on
+  setInterval(telemetryTick, 1000);
+  startWake();
+  const got = await motion;
+  if (got.some(v => v !== 'granted')) $('status').textContent = 'motion not allowed (' + got.join(', ') + '): lean and braking are off';
+  addEventListener('devicemotion', onMotion);
+  wakeLock();
+  $('setup').remove();                   // black mode; calibration learns while riding (60 s down, 120 s forward)
+  shown = ''; render();
+};
+</script>
+</body></html>
