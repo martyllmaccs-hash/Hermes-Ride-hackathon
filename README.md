@@ -213,11 +213,39 @@ that session's ride logs. The plugin itself summarises nothing and calls no mode
 ## Install
 ```bash
 hermes plugins install <owner>/hermes-ride --enable
-cd <hermes home>/plugins/hermes-ride && sh tools/fetch_assets.sh     # wake-word engine + model, ~33 MB download
+cd <hermes home>/plugins/hermes-ride
+# Activate official Emscripten 4.0.23 (instructions below), then:
+sh tools/fetch_assets.sh
 ```
-`tools/fetch_assets.sh` downloads the browser wake-word assets into `static/vendor/` (gitignored, ~16 MB kept),
-every file pinned by URL and sha256 (needs `curl`, `sha256sum`, `python3`). Without them the page falls back to
-the transcript wake engine by itself.
+`tools/fetch_assets.sh` compiles the browser wake runtime locally from official sherpa-onnx source
+and downloads the official checksum-pinned model into `static/vendor/` (gitignored). No third-party
+runtime binaries are downloaded. Without the assets the page falls back to transcript wake.
+
+Build prerequisites: `git`, `curl`, `sha256sum`, `python3` (3.12+), `cmake`, `make`, and official
+Emscripten **4.0.23**, plus several GB of free disk and internet access. Install the SDK in a directory
+you own (no system install or shell-startup edits needed):
+```bash
+git clone --branch 4.0.23 --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk-ride
+~/emsdk-ride/emsdk install 4.0.23
+~/emsdk-ride/emsdk activate 4.0.23
+source ~/emsdk-ride/emsdk_env.sh
+sh tools/fetch_assets.sh
+```
+The first build downloads the SDK and upstream CMake dependencies and may take several minutes.
+This builds the sherpa KWS runtime locally, not every dependency from source: upstream CMake uses
+its hash-pinned ONNX Runtime WASM static library from the upstream maintainer's
+`csukuangfj/onnxruntime-libs` GitHub releases. No prebuilt sherpa KWS runtime is fetched.
+The helper verifies the official source archive SHA-256 before compilation, requires SDK 4.0.23,
+and uses upstream `build-wasm-simd-kws.sh`. For runtime-only builds:
+`sh tools/build_wake_runtime.sh <output-directory>`. There is no unverified runtime reuse switch.
+The pinned upstream CMake demo uses an old epoch-12 Chinese model; the helper explicitly removes
+its demo guard, preloading and `.data` installation. Ride supplies the checksum-verified epoch-13
+zh-en model through its worker filesystem instead; no renamed/fake demo decoder is needed.
+Outputs are the two runtime JS files, WASM and `RUNTIME-MANIFEST.txt`; no demo `.data` is required.
+`MANIFEST.txt` records model provenance and output hashes. These hashes describe the local build,
+not a promise of byte-identical binaries across hosts. Build/model failures before copying assets
+leave the existing `static/vendor/` untouched. Run `node tests/wake_test.js` after installation;
+inspect its JSON `failures` array and ensure `kws` is not skipped to verify real phrase detection.
 
 Secrets (profile-scoped, e.g. `.env` or your secret manager), then restart that profile's gateway:
 
@@ -370,11 +398,10 @@ marked *untested* has not been run with Ride.
   -30 dBFS brown noise) and on none of the other fixtures; plain "Hermes," alone did not fire (measured down to a
   0.2 threshold), so say the two-word phrase. The Lana file fires on all five "Hey Lana" fixtures and on none of the
   negatives or the Hermes fixtures.
-  - Runtime: sherpa-onnx `wasm/kws` build, **Apache-2.0**. Upstream no longer publishes a prebuilt KWS web build;
-    the pinned copy is the one hosted in the Hugging Face space `yuiyide/sherpa-oon-kws` (commit `6a6f337…`, a
-    third-party upload). To use your own build: `./build-wasm-simd-kws.sh` in sherpa-onnx, copy the three files
-    into `static/vendor/` and run the fetch script with `SHERPA_SKIP_RUNTIME=1`. (The `@sherpaw/kws` npm package
-    is another Apache-2.0 option, not used here.)
+  - Runtime: locally built sherpa-onnx `wasm/kws`, **Apache-2.0**, official source commit
+    `bec3acea719faafa6c86c7022d98f19663b82a76`, archive SHA-256
+    `64b9fd63efe0501a577bd6760c23b7892806115ab31a9051b68da1c63ec5da56`.
+    See the build prerequisites above. No prebuilt sherpa KWS runtime or unofficial runtime mirror is used.
   - Model: `sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20` (k2-fsa release `kws-models`), **Apache-2.0** as
     declared by the original model card (ModelScope `pkufool/icefall-kws-zipformer-zh-en-3M-2025-12-20`). The
     release archive itself carries no licence file.
@@ -433,7 +460,8 @@ rendered once with `tools/render_status_clips.py`.
   utterances, usage, ride summaries; rotated 5 MB × 3) and `rides/<ride>.jsonl` (the 1 Hz ride logs; not rotated —
   delete old rides yourself). The phone keeps its own copy of each ride in IndexedDB.
 - **Phone-side downloads**: the page loads only from your server (cues, clips, the wake engine and model in
-  `static/vendor/`). `tools/fetch_assets.sh` is the only thing that downloads from the internet, run by you.
+  `static/vendor/`). Asset preparation (including the local build helper and upstream CMake dependency
+  downloads) runs only when you explicitly run `tools/fetch_assets.sh`.
 - **Credentials**: none stored; keys are read through Hermes's profile-scoped secrets. Every log line, turn-log
   record, ride-log record and live-test dump passes a recursive redactor: the keys it has read (and any 8+
   character piece of them), `sutkn_…` tokens, e-mail addresses and any 24+ character key-like run except a fixed

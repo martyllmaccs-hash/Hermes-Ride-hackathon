@@ -131,9 +131,17 @@ class Keywords(unittest.TestCase):
     def test_fetch_script_pins_everything(self):
         with open(os.path.join(ROOT, 'tools', 'fetch_assets.sh')) as f:
             s = f.read()
-        self.assertEqual(s.count('get "'), 4)                 # 3 runtime files + the model archive
+        self.assertEqual(s.count('get "'), 1)                 # official model archive only
         self.assertEqual(s.count('check "$M/'), 5)            # every extracted model file
-        self.assertIn('/resolve/6a6f3379ba6591bb17baf95537f278d1078d4d53', s)
+        self.assertNotIn('huggingface.co', s)
+        self.assertNotIn('SHERPA_SKIP_RUNTIME', s)
+        self.assertIn('build_wake_runtime.sh', s)
+        with open(os.path.join(ROOT, 'tools', 'build_wake_runtime.sh')) as f:
+            build = f.read()
+        self.assertIn('bec3acea719faafa6c86c7022d98f19663b82a76', build)
+        self.assertIn('64b9fd63efe0501a577bd6760c23b7892806115ab31a9051b68da1c63ec5da56', build)
+        self.assertIn('https://codeload.github.com/k2-fsa/sherpa-onnx/', build)
+        self.assertIn('4.0.23', build)
         with open(os.path.join(ROOT, '.gitignore')) as f:
             self.assertIn('static/vendor/', f.read())
 

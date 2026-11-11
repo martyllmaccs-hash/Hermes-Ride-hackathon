@@ -1,8 +1,8 @@
 // sherpa-onnx keyword spotter (the configured wake word, default "HEY HERMES") in a Web Worker. Assets come from static/vendor/ (tools/fetch_assets.sh):
-//   sherpa-onnx-wasm-kws-main.js/.wasm, sherpa-onnx-kws.js  (upstream wasm/kws build, pinned by sha256)
+//   sherpa-onnx-wasm-kws-main.js/.wasm, sherpa-onnx-kws.js  (local checksum-pinned upstream source build)
 //   kws-encoder.onnx, kws-decoder.onnx, kws-joiner.onnx, kws-tokens.txt  (zh-en 3M model, phone tokens)
 //   kws-words-<wake word>.txt  (one per wake word, generated from the model's own lexicon by tools/make_keywords.py)
-// The build's bundled 37 MB demo package is skipped (getPreloadedPackage -> empty); the model files are written into
+// The local build disables upstream demo preloading; verified model files are written into
 // the WASM file system instead. rideKwsCreate/rideKwsFeed are also run under node by tests/kws_test.js.
 'use strict';
 const RIDE_KWS_FILES = ['kws-tokens.txt', 'kws-encoder.onnx', 'kws-decoder.onnx', 'kws-joiner.onnx'];
@@ -21,7 +21,8 @@ function rideKwsCreate(Module, createKws, files, keywords, threshold, score) {
                   tokens: '/ride/kws-tokens.txt', provider: 'cpu', modelType: '', numThreads: 1, debug: 0,
                   modelingUnit: '', bpeVocab: ''},
     maxActivePaths: 4, numTrailingBlanks: 1, keywordsScore: score || 1.0, keywordsThreshold: threshold || 0.25,
-    keywords: String(keywords).trim(),
+    keywords: '', keywordsBuf: String(keywords).trim(),
+    keywordsBufSize: new TextEncoder().encode(String(keywords).trim()).length,
   });
   const stream = kws.createStream();       // one stream for the page's lifetime (this build can't free streams)
   return {

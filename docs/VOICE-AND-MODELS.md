@@ -90,8 +90,8 @@ logged warning.
 ## 4. Wake word
 - `RIDE_WAKE_WORD`: `hey hermes` (default) or `hey lana`. Unknown names fall back to the default.
 - The default engine, `sherpa`, is open-vocabulary keyword spotting in WebAssembly on the phone. While asleep
-  nothing leaves the phone. It needs the assets from `sh tools/fetch_assets.sh` (about 33 MB download, every file
-  sha256-pinned).
+  nothing leaves the phone. It needs the assets from `sh tools/fetch_assets.sh`: a local official-source build using
+  Emscripten 4.0.23 and the official checksum-pinned model (see README build prerequisites).
 - Without those assets, or if sherpa fails to load within 8 s, the page uses the `transcript` engine. That engine
   sends speech-like sound to Scribe while asleep, so it can look for the wake word. Run the fetch script.
 - A new wake word needs an entry in `ride_logic.WAKE_WORDS` plus a keywords file from `tools/make_keywords.py`.
