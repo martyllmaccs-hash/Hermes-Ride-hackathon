@@ -258,6 +258,53 @@ class Phrases(WhistleBase):
         self.assertFalse(self.core.rider_talking())
 
 
+class MinPhrase(WhistleBase):
+    """A phrase whose whole clip (pre-roll, speech and the VAD hangover's silence) is shorter than min_phrase_s is
+    dropped before Whistle sees it; 0 (the default) keeps every phrase."""
+    texts = ['Thank you.', 'This is a long enough sentence to keep.']
+    cfg = {'min_phrase_s': 3.2}
+
+    async def test_a_clip_under_the_minimum_is_dropped_and_never_transcribed(self):
+        await self.wake_and_say(10)                          # 25 frames = 2.5 s
+        await self.until(lambda: [r for r in self.log('dropped') if r.get('reason') == 'too_short_audio'])
+        (d,) = [r for r in self.log('dropped') if r.get('reason') == 'too_short_audio']
+        self.assertEqual((d['audio_s'], d['min_s']), (2.5, 3.2))
+        await asyncio.sleep(0.6)
+        self.assertEqual(self.wh.calls, [])
+        self.assertEqual(self.phone.of('final'), [])
+        self.assertEqual(self.agent.turns, [])
+
+    async def test_a_clip_exactly_at_the_minimum_is_kept(self):
+        await self.wake_and_say(17)                          # 15 + 17 = 32 frames = 3.2 s
+        fin = await self.phone.wait({'t': 'final'})
+        self.assertEqual(self.wh.calls, [32 * 3200])
+        self.assertEqual(fin['text'], 'Thank you.')
+
+    async def test_a_longer_clip_is_kept(self):
+        await self.wake_and_say(30)
+        await self.phone.wait({'t': 'final'})
+        self.assertEqual(len(self.wh.calls), 1)
+        self.assertEqual([r for r in self.log('dropped') if r.get('reason') == 'too_short_audio'], [])
+
+    async def test_the_second_short_phrase_in_a_window_is_dropped_too(self):
+        await self.wake_and_say(30)
+        await self.phone.wait({'t': 'final'})
+        await self.phrase(8)                                 # 0.8 s
+        await self.until(lambda: [r for r in self.log('dropped') if r.get('reason') == 'too_short_audio'])
+        await asyncio.sleep(0.5)
+        self.assertEqual(len(self.wh.calls), 1)
+
+
+class MinPhraseOff(WhistleBase):
+    texts = ['Thank you.']
+
+    async def test_default_is_off_and_keeps_a_one_second_phrase(self):
+        self.assertEqual(ride_core.DEFAULTS['min_phrase_s'], 0.0)
+        await self.wake_and_say(1)
+        await self.phone.wait({'t': 'final'})
+        self.assertEqual(len(self.wh.calls), 1)
+
+
 class BargeIn(WhistleBase):
     texts = ['"Hey, Hermes, how fast am I going?"', 'Stop right there.']
     tts_delay = 0.05

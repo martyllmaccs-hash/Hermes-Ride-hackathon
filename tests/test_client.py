@@ -31,7 +31,7 @@ class Page(unittest.TestCase):
         self.check('client_state_test.js', 151)
 
     def test_gate(self):                          # W3: VAD gate on synthetic PCM
-        self.check('gate_test.js', 80)
+        self.check('gate_test.js', 82)
 
     def test_wake(self):                          # W5: regex, refractory, fallback, real spotter
         res = self.check('wake_test.js', 30)

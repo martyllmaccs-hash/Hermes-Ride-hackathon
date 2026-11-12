@@ -128,7 +128,7 @@ class Live(LiveBase):
         self.assertEqual((cfg.get('orb_design'), cfg.get('word')), ('simple', False))   # WP5: the orb; word = debug
         self.assertEqual(cfg.get('orb_motion'), 1.0)         # P4: the orb moves with the bike (gain, 0 = off)
         self.assertEqual((cfg['cues'].get('mute'), cfg['cues'].get('unmute')), ('cues/mute.m4a', 'cues/unmute.m4a'))
-        self.assertEqual(cfg['vad'], {'base_db': -38.0, 'k': 0.15, 'cap_db': -25.0, 'hangover_ms': 600,
+        self.assertEqual(cfg['vad'], {'base_db': -38.0, 'k': 0.15, 'cap_db': -25.0, 'hangover_ms': 2000,
                                       'preroll_ms': 800, 'wake_preroll_ms': 1500})
         self.assertEqual(cfg['wake']['engine'], 'sherpa')
         self.assertEqual(cfg['cues']['wake'], ['cues/wake_a.m4a', 'cues/wake_b.m4a'])

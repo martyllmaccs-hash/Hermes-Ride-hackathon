@@ -23,9 +23,21 @@ function noise(db, seed) {
 const silence = () => new Int16Array(320);
 function rig(opts) {
   const ev = [];
-  const g = RideGate(opts, e => ev.push(e));
+  // Legacy timing fixtures explicitly keep their old 600 ms setting; public default tested separately.
+  const g = RideGate(Object.assign({hangover_ms: 600}, opts || {}), e => ev.push(e));
   const run = (n, make) => { for (let i = 0; i < n; i++) g.feed(make(i)); };
   return {g, ev, run, kinds: () => ev.map(e => e.e), audio: () => ev.filter(e => e.e === 'audio')};
+}
+
+// Public default: allow a full two-second thinking pause before VAD-off.
+{
+  const events = [], g = RideGate({}, e => events.push(e));
+  g.wake();
+  for (let i = 0; i < 20; i++) g.feed(tone(-20));
+  for (let i = 0; i < 99; i++) g.feed(silence());
+  eq('default: 1980 ms quiet does not end speech', events.filter(e => e.e === 'vad' && e.s === 0).length, 0);
+  g.feed(silence());
+  eq('default: 2000 ms quiet ends speech once', events.filter(e => e.e === 'vad' && e.s === 0).length, 1);
 }
 
 eq('level of a -20 dB tone', Math.round(rideFrameDb(tone(-20))), -20);

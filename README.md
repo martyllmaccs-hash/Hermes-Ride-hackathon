@@ -25,6 +25,8 @@ parked: a restart drops the Ride connection. Full list with ranges: the settings
 | how the agent names you | `rider_name` | "the rider" |
 | a different reply voice or voice model | `voice_id`, `tts_model` | from Hermes's `tts.elevenlabs` settings |
 | free, offline speech-to-text on your server instead of ElevenLabs Scribe | `stt_engine: whistle` | `scribe` |
+| more time to pause between words before speech ends | `vad_hangover_ms` | `2000` ms (was `600`) |
+| drop very short Whistle clips (phantom "Thank you" phrases) | `min_phrase_s` | `0` (off); `3.2` drops clips under 3.2 s, silence included |
 | a less (or more) sensitive mic | `mic_base_db` (higher = less sensitive) | `-38` dBFS |
 | quieter or louder cues and status clips | `cue_gain` | `0.5` |
 | when the "doo, doo" thinking tone starts | `tone_first_s` | `1.2` s |
@@ -268,6 +270,8 @@ Secrets (profile-scoped, e.g. `.env` or your secret manager), then restart that 
 | `RIDE_LANGUAGE` | Scribe language, default `en` (English locked); empty or `auto` = auto-detect |
 | `RIDE_LANGUAGES` | auto-detect hints (`secondary_languages`), default `en` (English only; other languages are not supported yet: CJK utterances are dropped by the word count) |
 | `RIDE_KEYTERMS` | e.g. `Hermes`; off by default (Scribe keyterms cost +20 %) |
+| `RIDE_VAD_HANGOVER_MS` | quiet time before the phone sends VAD-off; default `2000` ms (was `600`), range 0–5000; `vad_hangover_ms` in plugin settings; Whistle adds its separate 0.9 s phrase-end wait |
+| `RIDE_MIN_PHRASE_S` | Whistle only: a finished phrase whose whole clip (pre-roll, speech and trailing silence) is shorter than this many seconds is dropped before transcription and logged as `dropped: too_short_audio`; default `0` = off, range 0–10; `min_phrase_s` in plugin settings. Real short commands are dropped too |
 | `RIDE_WINDOW_S` | conversation window after an answer, default `10` (speech in progress keeps it open: VAD speech or a Scribe partial in the last 1.5 s) |
 | `RIDE_PRICE_STT_PER_HOUR` / `RIDE_PRICE_TTS_PER_1K` | prices for the cost estimate, default `0.39` / `0.04` USD |
 | `RIDE_END_OF_TURN_S` | Scribe VAD silence before a commit, default `1.2` |

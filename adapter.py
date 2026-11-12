@@ -168,8 +168,10 @@ def core_config(extra: dict, hermes_cfg: dict) -> dict:
         'whistle_weights': str(get('whistle_weights', 'RIDE_WHISTLE_WEIGHTS', whisper_weights)),
         'whistle_language': '',          # filled below from stt_language (or the setting when it is not empty)
         'whistle_end_s': max(0.3, min(3.0, num('whistle_end_s', 'RIDE_WHISTLE_END_S', 0.9))),
+        'min_phrase_s': max(0.0, min(10.0, num('min_phrase_s', 'RIDE_MIN_PHRASE_S', 0.0))),
         'whistle_timeout_s': max(1.0, min(120.0, num('whistle_timeout_s', 'RIDE_WHISTLE_TIMEOUT_S', 20.0))),
         'window_s': max(0.0, min(300.0, num('window_s', 'RIDE_WINDOW_S', 10))),
+        'vad_hangover_ms': max(0, min(5000, int(num('vad_hangover_ms', 'RIDE_VAD_HANGOVER_MS', 2000)))),
         'vad_base_db': max(-70.0, min(-20.0, mic_db if mic_db == mic_db else -38.0)),   # NaN -> the default
         'wake_engine': 'transcript' if str(get('wake_engine', 'RIDE_WAKE_ENGINE', 'sherpa')).strip().lower()
                        == 'transcript' else 'sherpa',

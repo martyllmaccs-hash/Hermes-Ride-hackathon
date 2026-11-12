@@ -22,7 +22,7 @@
 'use strict';
 // preroll_ms: before a VAD start (transcript probe). wake_preroll_ms: before a sherpa hit, which fires ~0.1 s after
 // the phrase ends, so the whole "Hey Lana" reaches STT and can be stripped (live run 1: 800 ms gave "Anna, ...").
-const RIDE_GATE_DEFAULTS = {base_db: -38, k: 0.15, cap_db: -25, hangover_ms: 600, preroll_ms: 800, wake_preroll_ms: 1500,
+const RIDE_GATE_DEFAULTS = {base_db: -38, k: 0.15, cap_db: -25, hangover_ms: 2000, preroll_ms: 800, wake_preroll_ms: 1500,
                             window_s: 10,
                             start_frames: 2, probe_tail_ms: 1500, engine: 'sherpa',
                             vad_alone_ms: 8000, heard_ms: 1500, vary_ms: 1000, vary_db: 3,

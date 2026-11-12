@@ -81,7 +81,7 @@ async function probeWhileSpeaking() {
   const from = page.sent.length;
   P.feed(-20, 20);                       // her voice through the speaker, or a passenger: voiced, no wake word
   eq('D1 voiced sound during the reply: a probe, not speaking', P.run('gate.state()'), 'probe');
-  P.feed(-70, 30 + 75);                  // hangover + the 1.5 s probe tail
+  P.feed(-70, 100 + 75);                 // 2000 ms public VAD hangover + the 1.5 s probe tail
   const probeBins = page.sent.slice(from).filter(m => m.binary).length;
   P.feed(-70, 150);                      // the reply goes on: 5.5 s since the sound
   eq('D1 0 PCM frames after the probe tail without a wake', [page.sent.slice(from).filter(m => m.binary).length - probeBins, P.run('gate.state()')], [0, 'probe']);

@@ -103,6 +103,20 @@ class Registration(unittest.TestCase):
                          ('server', 'Lana', 'transcript', 300.0, 'fr'))
         self.assertEqual(adapter.core_config({'stt_route': 'bogus', 'wake_engine': 'oww'}, {})['stt_route'], 'phone')
 
+    def test_min_phrase_s_is_off_by_default_and_clamped(self):
+        self.assertEqual(adapter.core_config({}, {}).get('min_phrase_s'), 0.0)
+        self.assertEqual(adapter.core_config({'min_phrase_s': 3.2}, {}).get('min_phrase_s'), 3.2)
+        self.assertEqual(adapter.core_config({'min_phrase_s': 'junk'}, {}).get('min_phrase_s'), 0.0)
+        self.assertEqual(adapter.core_config({'min_phrase_s': -1}, {}).get('min_phrase_s'), 0.0)
+        self.assertEqual(adapter.core_config({'min_phrase_s': 99}, {}).get('min_phrase_s'), 10.0)
+
+    def test_vad_hangover_setting_preserves_default_and_accepts_two_seconds(self):
+        self.assertEqual(adapter.core_config({}, {}).get('vad_hangover_ms'), 2000)
+        self.assertEqual(adapter.core_config({'vad_hangover_ms': 2000}, {}).get('vad_hangover_ms'), 2000)
+        self.assertEqual(adapter.core_config({'vad_hangover_ms': 'junk'}, {}).get('vad_hangover_ms'), 2000)
+        self.assertEqual(adapter.core_config({'vad_hangover_ms': -1}, {}).get('vad_hangover_ms'), 0)
+        self.assertEqual(adapter.core_config({'vad_hangover_ms': 99999}, {}).get('vad_hangover_ms'), 5000)
+
     def test_wake_word_setting(self):                 # 10 Nov, Hermes-Ride: public default "Hey Hermes"
         self.assertEqual(adapter.core_config({}, {})['wake_word'], 'hey hermes')
         self.assertEqual(adapter.core_config({'wake_word': 'Hey Lana'}, {})['wake_word'], 'hey lana')

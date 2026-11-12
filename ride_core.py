@@ -98,6 +98,7 @@ DEFAULTS = {
     'stt_engine': 'scribe', 'stt_fallback': 'scribe',       # 'scribe' | 'none': what a Whistle failure switches to
     'whistle_python': 'python3', 'whistle_weights': '', 'whistle_language': '',
     'whistle_end_s': 0.9,            # silence after the VAD-off edge before the phrase is transcribed (0.3..3)
+    'min_phrase_s': 0.0,             # Whistle: a clip shorter than this (whole clip, silence included) is dropped; 0 = off
     'whistle_timeout_s': 20.0,       # one phrase: past this the helper is killed and the phrase fails
     'stt_idle_close_s': 4.0,         # server route: close the Scribe session after this long without audio
     'stt_start_timeout_s': 8.0,      # server route: a Scribe socket without session_started by then is closed
@@ -108,7 +109,7 @@ DEFAULTS = {
     'turn_timeout_s': 900,           # safety net only: approvals can hold a turn for approvals.timeout
     'log_dir': None, 'log_max_bytes': 5_000_000, 'log_backups': 3,
     # phone-side settings, sent in hello.cfg
-    'window_s': 10, 'vad_base_db': -38.0, 'vad_k_db': 0.15, 'vad_cap_db': -25.0, 'vad_hangover_ms': 600,
+    'window_s': 10, 'vad_base_db': -38.0, 'vad_k_db': 0.15, 'vad_cap_db': -25.0, 'vad_hangover_ms': 2000,
     'vad_preroll_ms': 800, 'wake_preroll_ms': 1500, 'wake_engine': 'sherpa', 'wake_threshold': 0.25, 'wake_score': 1.0,
     'wake_refractory_ms': 2000, 'wake_load_timeout_ms': 8000,
     'wake_word': 'hey hermes',       # 10 Nov (Hermes-Ride): ride_logic.WAKE_WORDS; a personal name is config only
@@ -898,6 +899,12 @@ class RideCore:
         if not wh['pcm'] or not (wh['speech'] or wh['first']):
             return                                   # no speech of its own and not the first buffer: silence
         self.wh_first.add((wh['conn'], wh['epoch']))
+        min_s = float(self.cfg.get('min_phrase_s') or 0)
+        audio_s = round(len(wh['pcm']) / 32000, 2)
+        if min_s > 0 and audio_s < min_s:
+            self.turns.write({'event': 'dropped', 'reason': 'too_short_audio', 'audio_s': audio_s, 'min_s': min_s,
+                              'cut': why, 'at': rl.now()})
+            return
         job = {'conn': wh['conn'], 'epoch': wh['epoch'], 'pcm': bytes(wh['pcm']), 'vad_on': wh['vad_on'],
                'vad_off': wh['vad_off'], 'cut': why}
         self.wh_jobs.append(job)
